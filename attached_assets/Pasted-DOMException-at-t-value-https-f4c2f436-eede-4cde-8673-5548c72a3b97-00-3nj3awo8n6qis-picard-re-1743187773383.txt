@@ -1,0 +1,29 @@
+DOMException {}
+
+at t.value (https://f4c2f436-eede-4cde-8673-5548c72a3b97-00-3nj3awo8n6qis.picard.replit.dev:5000/__replco/static/devtools/eruda/3.2.3/eruda.js:2:17465)
+at new t (https://f4c2f436-eede-4cde-8673-5548c72a3b97-00-3nj3awo8n6qis.picard.replit.dev:5000/__replco/static/devtools/eruda/3.2.3/eruda.js:2:12630)
+at t.value (https://f4c2f436-eede-4cde-8673-5548c72a3b97-00-3nj3awo8n6qis.picard.replit.dev:5000/__replco/static/devtools/eruda/3.2.3/eruda.js:2:32766)
+at https://f4c2f436-eede-4cde-8673-5548c72a3b97-00-3nj3awo8n6qis.picard.replit.dev:5000/__replco/static/devtools/eruda/3.2.3/eruda.js:2:34400
+Error updating chart: 
+Error {}
+message: "Assertion failed: data must be asc ordered by time, index=1, time=1742428800, prev time=1742428800"
+stack: "Error: Assertion failed: data must be asc ordered by time, index=1, time=1742428800, prev time=1742428800↵ at assert (https://f4c2f436-eede-4cde-8673-5548c72a3b97-00-3nj3awo8n6qis.picard.replit.dev:5000/@fs/home/runner/workspace/node_modules/.vite/deps/lightweight-charts.js?v=f7e8dcab:486:11)↵ at checkItemsAreOrdered (https://f4c2f436-eede-4cde-8673-5548c72a3b97-00-3nj3awo8n6qis.picard.replit.dev:5000/@fs/home/runner/workspace/node_modules/.vite/deps/lightweight-charts.js?v=f7e8dcab:10974:5)↵ at SeriesApi.setData (https://f4c2f436-eede-4cde-8673-5548c72a3b97-00-3nj3awo8n6qis.picard.replit.dev:5000/@fs/home/runner/workspace/node_modules/.vite/deps/lightweight-charts.js?v=f7e8dcab:11111:5)↵ at TradingChart.updateChart (https://f4c2f436-eede-4cde-8673-5548c72a3b97-00-3nj3awo8n6qis.picard.replit.dev:5000/src/lib/charts.ts:170:27)↵ at TradingChart.loadData (https://f4c2f436-eede-4cde-8673-5548c72a3b97-00-3nj3awo8n6qis.picard.replit.dev:5000/src/lib/charts.ts:117:12)"
+get stack: ƒ ()
+set stack: ƒ ()
+[[Prototype]]: Object
+
+Error updating chart: 
+Error {}
+message: "Assertion failed: data must be asc ordered by time, index=1, time=1742428800, prev time=1742428800"
+stack: "Error: Assertion failed: data must be asc ordered by time, index=1, time=1742428800, prev time=1742428800↵ at assert (https://f4c2f436-eede-4cde-8673-5548c72a3b97-00-3nj3awo8n6qis.picard.replit.dev:5000/@fs/home/runner/workspace/node_modules/.vite/deps/lightweight-charts.js?v=f7e8dcab:486:11)↵ at checkItemsAreOrdered (https://f4c2f436-eede-4cde-8673-5548c72a3b97-00-3nj3awo8n6qis.picard.replit.dev:5000/@fs/home/runner/workspace/node_modules/.vite/deps/lightweight-charts.js?v=f7e8dcab:10974:5)↵ at SeriesApi.setData (https://f4c2f436-eede-4cde-8673-5548c72a3b97-00-3nj3awo8n6qis.picard.replit.dev:5000/@fs/home/runner/workspace/node_modules/.vite/deps/lightweight-charts.js?v=f7e8dcab:11111:5)↵ at TradingChart.updateChart (https://f4c2f436-eede-4cde-8673-5548c72a3b97-00-3nj3awo8n6qis.picard.replit.dev:5000/src/lib/charts.ts:170:27)↵ at TradingChart.loadData (https://f4c2f436-eede-4cde-8673-5548c72a3b97-00-3nj3awo8n6qis.picard.replit.dev:5000/src/lib/charts.ts:117:12)"
+get stack: ƒ ()
+set stack: ƒ ()
+[[Prototype]]: Object
+
+Error toggling SMC zones: 
+SyntaxError {}
+
+at t.value (https://f4c2f436-eede-4cde-8673-5548c72a3b97-00-3nj3awo8n6qis.picard.replit.dev:5000/__replco/static/devtools/eruda/3.2.3/eruda.js:2:17465)
+at new t (https://f4c2f436-eede-4cde-8673-5548c72a3b97-00-3nj3awo8n6qis.picard.replit.dev:5000/__replco/static/devtools/eruda/3.2.3/eruda.js:2:12630)
+at t.value (https://f4c2f436-eede-4cde-8673-5548c72a3b97-00-3nj3awo8n6qis.picard.replit.dev:5000/__replco/static/devtools/eruda/3.2.3/eruda.js:2:32766)
+at https://f4c2f436-eede-4cde-8673-5548c72a3b97-00-3nj3awo8n6qis.picard.replit.dev:5000/__replco/static/devtools/eruda/3.2.3/eruda.js:2:34400

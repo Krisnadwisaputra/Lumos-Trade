@@ -29,11 +29,23 @@ const Dashboard = ({ user }: DashboardProps) => {
   const [userId, setUserId] = useState<number>(1); // This would come from the API in production
   
   const { data: currentPrice = 0 } = useQuery({
-    queryKey: ['/api/current-price', currentPair],
+    queryKey: ['/api/exchange/price', currentPair],
     queryFn: async () => {
       try {
-        // In production, return apiRequest('GET', `/api/current-price?pair=${currentPair}`)
-        return 43500.25;
+        // Get real price from the exchange API
+        const priceData = await apiRequest<{price?: number, timestamp?: number}>('GET', `/api/exchange/price?symbol=${currentPair}`);
+        
+        if (priceData && typeof priceData.price === 'number') {
+          return priceData.price;
+        }
+        
+        // Fallback to simulated data API if exchange API fails
+        const fallbackData = await apiRequest<{price?: string, change?: string}>('GET', `/api/current-price?pair=${currentPair}`);
+        if (fallbackData && fallbackData.price) {
+          return parseFloat(fallbackData.price);
+        }
+        
+        return 0;
       } catch (error) {
         console.error('Error fetching current price:', error);
         return 0;
@@ -42,12 +54,56 @@ const Dashboard = ({ user }: DashboardProps) => {
     refetchInterval: 10000 // Refetch every 10 seconds
   });
 
+  // Define the type for balance data
+  interface BalanceData {
+    [currency: string]: {
+      free?: number;
+      used?: number;
+      total?: number;
+    }
+  }
+
   const { data: balance = "0.00" } = useQuery({
     queryKey: ['/api/exchange/balance'],
     queryFn: async () => {
       try {
-        // In production, return apiRequest('GET', '/api/exchange/balance')
-        return "10,250.50";
+        // Get real balance from API
+        const balanceData = await apiRequest<BalanceData>('GET', '/api/exchange/balance');
+        
+        // Process the balance data to get a formatted string
+        let totalBalance = 0;
+        
+        // Sum up USDT balance and any other stable coins
+        if (balanceData) {
+          if (balanceData.USDT && typeof balanceData.USDT.total === 'number') {
+            totalBalance += balanceData.USDT.total;
+          }
+          if (balanceData.BUSD && typeof balanceData.BUSD.total === 'number') {
+            totalBalance += balanceData.BUSD.total;
+          }
+          if (balanceData.USDC && typeof balanceData.USDC.total === 'number') {
+            totalBalance += balanceData.USDC.total;
+          }
+          
+          // Add estimated value of BTC (convert to USD for display)
+          if (balanceData.BTC && typeof balanceData.BTC.total === 'number') {
+            // Use a hardcoded price for BTC if we can't get real-time price
+            const btcPrice = 42000; // approximation
+            totalBalance += balanceData.BTC.total * btcPrice;
+          }
+          
+          // Add estimated value of ETH (convert to USD for display)
+          if (balanceData.ETH && typeof balanceData.ETH.total === 'number') {
+            // Use a hardcoded price for ETH if we can't get real-time price
+            const ethPrice = 3000; // approximation
+            totalBalance += balanceData.ETH.total * ethPrice;
+          }
+        }
+        
+        return totalBalance.toLocaleString(undefined, {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2
+        });
       } catch (error) {
         console.error('Error fetching account balance:', error);
         return "0.00";

@@ -243,7 +243,7 @@ export class TradingChart {
         });
         
         // Create standardized data for the chart library
-        const standardizedData = sortedRawData.map((item, index) => {
+        const tempData = sortedRawData.map((item, index) => {
           // Ensure consecutive times are properly ordered
           const timestamp = typeof item.time === 'number' ? item.time : parseFloat(item.time);
           
@@ -252,24 +252,95 @@ export class TradingChart {
           const year = date.getUTCFullYear();
           const month = String(date.getUTCMonth() + 1).padStart(2, '0');
           const day = String(date.getUTCDate()).padStart(2, '0');
+          const hour = String(date.getUTCHours()).padStart(2, '0');
+          const minute = String(date.getUTCMinutes()).padStart(2, '0');
+          const second = String(date.getUTCSeconds()).padStart(2, '0');
           
-          // Use strict ISO date format (YYYY-MM-DD) which is best supported by the chart library
-          const dateString = `${year}-${month}-${day}`;
+          // Create a unique time string that includes details to prevent duplicates
+          // For daily data, use YYYY-MM-DD
+          // For more granular timeframes, include hours/minutes/seconds/index
+          let dateString;
+          if (this.currentTimeframe.includes('d')) {
+            dateString = `${year}-${month}-${day}`;
+          } else {
+            // Add a tiny increment based on index to ensure uniqueness
+            // This is necessary because LightweightCharts requires strictly increasing times
+            dateString = `${year}-${month}-${day} ${hour}:${minute}:${second}.${index}`;
+          }
           
           return {
             // Use string date format which is most reliable with lightweight-charts
             time: dateString,
+            timeOriginal: timestamp, // Keep the original timestamp for de-duplication
             open: parseFloat(item.open),
             high: parseFloat(item.high),
             low: parseFloat(item.low),
             close: parseFloat(item.close)
           };
         });
+        
+        // Ensure no duplicate times by creating a Map keyed by time
+        const uniqueDataMap = new Map();
+        tempData.forEach((item, index) => {
+          const currentKey = item.time;
+          // If we have a duplicate time, make it unique by adding a small increment
+          if (uniqueDataMap.has(currentKey)) {
+            const incrementedTime = new Date(item.timeOriginal * 1000 + (index * 100)); // Add milliseconds based on index
+            const year = incrementedTime.getUTCFullYear();
+            const month = String(incrementedTime.getUTCMonth() + 1).padStart(2, '0');
+            const day = String(incrementedTime.getUTCDate()).padStart(2, '0');
+            const hour = String(incrementedTime.getUTCHours()).padStart(2, '0');
+            const minute = String(incrementedTime.getUTCMinutes()).padStart(2, '0');
+            const second = String(incrementedTime.getUTCSeconds()).padStart(2, '0');
+            const millisecond = String(incrementedTime.getUTCMilliseconds()).padStart(3, '0');
+            
+            // Create a unique key with the incremented time
+            const newKey = `${year}-${month}-${day} ${hour}:${minute}:${second}.${millisecond}`;
+            item.time = newKey;
+          }
+          uniqueDataMap.set(item.time, item);
+        });
+        
+        // Convert back to array and remove the temporary timeOriginal property
+        const standardizedData = Array.from(uniqueDataMap.values()).map(item => {
+          const { timeOriginal, ...rest } = item;
+          return rest;
+        });
+        
+        // Verify data is properly sorted by time
+        standardizedData.sort((a, b) => {
+          return a.time < b.time ? -1 : a.time > b.time ? 1 : 0;
+        });
           
         console.log(`Setting chart data with ${standardizedData.length} candles, first date: ${standardizedData[0]?.time}, last date: ${standardizedData[standardizedData.length-1]?.time}`);
         
-        // Set the data to the chart
-        this.candleSeries.setData(standardizedData);
+        // Final safety check to ensure no duplicate times
+        const times = standardizedData.map(item => item.time);
+        const hasDuplicates = new Set(times).size !== times.length;
+        if (hasDuplicates) {
+          console.warn("Warning: Duplicate times detected after processing");
+          // Find and log duplicate times
+          const counts: Record<string, number> = {};
+          const duplicates: Array<{index: number, time: string}> = [];
+          times.forEach((time, index) => {
+            counts[time] = (counts[time] || 0) + 1;
+            if (counts[time] > 1) {
+              duplicates.push({ index, time });
+            }
+          });
+          console.warn("Duplicate times:", duplicates);
+          
+          // Last resort: generate completely artificial but unique timestamps
+          const finalData = standardizedData.map((item, index) => ({
+            ...item,
+            time: index // Use index as time - this is a fallback solution
+          }));
+          this.candleSeries.setData(finalData);
+        } else {
+          // Set the data to the chart
+          this.candleSeries.setData(standardizedData);
+        }
+        
         this.chart.timeScale().fitContent();
       } catch (error) {
         console.error('Error updating chart:', error);
@@ -340,6 +411,11 @@ export class TradingChart {
       
       if (this.emaSeries[period] && Array.isArray(rawData) && rawData.length > 0) {
         try {
+          if (rawData.some((item: any) => item.time === undefined || item.value === undefined)) {
+            console.error(`Invalid EMA data found for period ${period}:`, rawData.find((item: any) => item.time === undefined || item.value === undefined));
+            return;
+          }
+          
           // Make a copy of the data and sort by time before processing
           const sortedRawData = [...rawData].sort((a, b) => {
             const timeA = typeof a.time === 'number' ? a.time : parseFloat(a.time);
@@ -347,8 +423,8 @@ export class TradingChart {
             return timeA - timeB;
           });
           
-          // Standardize the EMA data format to match our candlestick format
-          const standardizedData = sortedRawData.map((item: any) => {
+          // Create temporary data with original timestamps
+          const tempData = sortedRawData.map((item: any, index) => {
             // Ensure time is a number for processing
             const timestamp = typeof item.time === 'number' ? item.time : parseFloat(item.time);
             
@@ -357,19 +433,61 @@ export class TradingChart {
             const year = date.getUTCFullYear();
             const month = String(date.getUTCMonth() + 1).padStart(2, '0');
             const day = String(date.getUTCDate()).padStart(2, '0');
+            const hour = String(date.getUTCHours()).padStart(2, '0');
+            const minute = String(date.getUTCMinutes()).padStart(2, '0');
             
-            // Use strict ISO date format (YYYY-MM-DD) which is best supported
+            // Use either simple date format or more detailed format with index to ensure uniqueness
             const dateString = `${year}-${month}-${day}`;
             
             return {
               time: dateString,
+              timeOriginal: timestamp,
               value: parseFloat(item.value)
             };
           });
           
+          // Ensure no duplicate times
+          const uniqueTimes = new Map();
+          tempData.forEach((item, index) => {
+            if (uniqueTimes.has(item.time)) {
+              // If we already have this time, create a unique one by adding a small increment
+              const date = new Date(item.timeOriginal * 1000);
+              // Add a unique index to each duplicate
+              const newTime = `${item.time}.${index}`;
+              item.time = newTime;
+            }
+            uniqueTimes.set(item.time, item);
+          });
+          
+          // Convert back to array and remove the temporary timeOriginal property
+          const standardizedData = Array.from(uniqueTimes.values()).map(item => {
+            const { timeOriginal, ...rest } = item;
+            return rest;
+          });
+          
+          // Verify data is properly sorted by time
+          standardizedData.sort((a, b) => {
+            return a.time < b.time ? -1 : a.time > b.time ? 1 : 0;
+          });
+          
           console.log(`Setting EMA ${period} data with ${standardizedData.length} points, first date: ${standardizedData[0]?.time}, last date: ${standardizedData[standardizedData.length-1]?.time}`);
           
-          this.emaSeries[period].setData(standardizedData);
+          // Final safety check to ensure no duplicate times
+          const times = standardizedData.map(item => item.time);
+          const hasDuplicates = new Set(times).size !== times.length;
+          
+          if (hasDuplicates) {
+            console.warn(`Warning: Duplicate times still detected in EMA ${period} data after processing`);
+            // Last resort: create numeric index-based times
+            const finalData = standardizedData.map((item, index) => ({
+              time: index,
+              value: item.value
+            }));
+            this.emaSeries[period].setData(finalData);
+          } else {
+            // Set the data to the chart
+            this.emaSeries[period].setData(standardizedData);
+          }
         } catch (error) {
           console.error(`Error setting EMA ${period} data:`, error);
         }
