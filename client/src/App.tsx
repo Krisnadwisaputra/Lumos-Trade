@@ -14,16 +14,23 @@ function Router() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Initialize Firebase
-    initializeFirebase();
-
+    // Initialize Firebase first
+    const app = initializeFirebase();
+    
     // Listen for auth state changes
-    const unsubscribe = auth.onAuthStateChanged((authUser) => {
-      setUser(authUser);
+    let unsubscribe: () => void;
+    if (auth) {
+      unsubscribe = auth.onAuthStateChanged((authUser) => {
+        setUser(authUser);
+        setLoading(false);
+      });
+    } else {
       setLoading(false);
-    });
+    }
 
-    return () => unsubscribe();
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
   }, []);
 
   if (loading) {

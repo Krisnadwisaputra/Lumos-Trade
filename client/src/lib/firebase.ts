@@ -20,16 +20,18 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID || ""
 };
 
-// Initialize Firebase
+// Initialize Firebase and get auth instance
+let app;
+export let auth;
+
 export const initializeFirebase = () => {
   if (!firebaseInitialized) {
-    initializeApp(firebaseConfig);
+    app = initializeApp(firebaseConfig);
+    auth = getAuth(app);
     firebaseInitialized = true;
   }
+  return app;
 };
-
-// Export auth functions
-export const auth = getAuth();
 
 export const registerUser = async (email: string, password: string): Promise<User> => {
   const userCredential = await createUserWithEmailAndPassword(auth, email, password);
