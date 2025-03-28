@@ -14,7 +14,9 @@ const clients: Map<WebSocket, ClientSubscription> = new Map();
 
 // Initialize WebSocket server
 export function initializeWebSocket(server: http.Server) {
+  console.log('Initializing WebSocket server...');
   const wss = new WebSocketServer({ server, path: '/ws' });
+  console.log('WebSocket server created with path: /ws');
   log('WebSocket server initialized');
 
   wss.on('connection', (ws) => {
@@ -218,9 +220,11 @@ let simulationIntervals: Map<string, NodeJS.Timeout> = new Map();
 function startSimulationForMarket(market: string) {
   // Don't start multiple simulations for the same market
   if (simulationIntervals.has(market)) {
+    console.log(`Simulation already running for market: ${market}`);
     return;
   }
   
+  console.log(`Starting market data simulation for market: ${market}`);
   log(`Starting market data simulation for ${market}`);
   
   // Notify all clients that we're switching to simulation mode
