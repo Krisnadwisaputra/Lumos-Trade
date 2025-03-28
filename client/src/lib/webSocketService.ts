@@ -4,6 +4,8 @@ export type WebSocketMessage = {
   market?: string;
   status?: string;
   data?: any;
+  source?: 'simulation' | 'live';
+  message?: string;
 };
 
 type WebSocketCallback = (data: any) => void;
@@ -162,10 +164,29 @@ export class WebSocketService {
         console.log(`Market ${message.market} subscription status: ${message.status}`);
         break;
         
+      case 'simulation_started':
+        console.log(`Switching to simulation mode for ${message.market}: ${message.message}`);
+        
+        // Dispatch a custom event for simulation mode
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('ws-simulation', { 
+            detail: { market: message.market } 
+          }));
+        }
+        break;
+        
       case 'kline':
         // Notify subscribers for this market
         const market = message.market || '';
         const callbacks = this.marketSubscriptions.get(market);
+        
+        // Check if this is simulated data
+        if (message.source === 'simulation' && typeof window !== 'undefined') {
+          // Ensure we're showing simulation status
+          window.dispatchEvent(new CustomEvent('ws-simulation', { 
+            detail: { market }
+          }));
+        }
         
         if (callbacks) {
           callbacks.forEach(callback => {

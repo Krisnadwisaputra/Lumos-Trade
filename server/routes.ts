@@ -6,6 +6,18 @@ import z from "zod";
 import { ZodError } from "zod";
 import { fromZodError } from "zod-validation-error";
 import { initializeWebSocket } from "./websocket";
+import { 
+  getAccountBalance, 
+  getMarketPrice, 
+  createMarketOrder, 
+  createLimitOrder, 
+  getOpenOrders, 
+  cancelOrder,
+  getOrderStatus,
+  getTradeHistory as getExchangeTradeHistory,
+  executeTradeSignal,
+  formatPair
+} from "./exchange";
 
 export async function registerRoutes(app: Express, httpServer: Server): Promise<Server> {
   // WebSocket is initialized in server/index.ts, we don't need to initialize it here
@@ -267,6 +279,211 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       res.json(price);
     } catch (error) {
       res.status(500).json({ error: "Failed to get current price" });
+    }
+  });
+
+  // Live Trading API endpoints
+  app.get("/api/exchange/balance", async (req: Request, res: Response) => {
+    try {
+      const balance = await getAccountBalance();
+      res.json(balance);
+    } catch (error: any) {
+      res.status(500).json({ error: `Failed to get account balance: ${error.message}` });
+    }
+  });
+
+  app.get("/api/exchange/price", async (req: Request, res: Response) => {
+    try {
+      const symbol = (req.query.symbol as string) || 'BTC/USDT';
+      const formatted = formatPair(symbol);
+      const price = await getMarketPrice(formatted);
+      res.json(price);
+    } catch (error: any) {
+      res.status(500).json({ error: `Failed to get market price: ${error.message}` });
+    }
+  });
+
+  app.post("/api/exchange/order/market", async (req: Request, res: Response) => {
+    try {
+      const { symbol, side, amount } = req.body;
+      
+      if (!symbol || !side || !amount) {
+        return res.status(400).json({ error: "Missing required parameters" });
+      }
+      
+      if (side !== 'buy' && side !== 'sell') {
+        return res.status(400).json({ error: "Side must be 'buy' or 'sell'" });
+      }
+
+      const formatted = formatPair(symbol);
+      const order = await createMarketOrder(formatted, side, amount);
+      
+      // Log the trade in our system
+      const userId = parseInt(req.body.userId);
+      if (userId) {
+        const priceValue = (order.price || order.average || 0) as number;
+        await storage.addTrade({
+          userId,
+          pair: symbol,
+          type: 'market',
+          // Note: side is included in type field as 'buy' or 'sell'
+          entryPrice: priceValue.toString(),
+          exitPrice: priceValue.toString(), // For market orders, entry and exit are the same
+          amount: amount.toString(),
+          result: '0', // Calculated later with actual data
+          botConfigId: req.body.botConfigId ? parseInt(req.body.botConfigId) : null,
+          status: 'closed'
+        });
+      }
+      
+      res.json(order);
+    } catch (error: any) {
+      res.status(500).json({ error: `Failed to create market order: ${error.message}` });
+    }
+  });
+
+  app.post("/api/exchange/order/limit", async (req: Request, res: Response) => {
+    try {
+      const { symbol, side, amount, price } = req.body;
+      
+      if (!symbol || !side || !amount || !price) {
+        return res.status(400).json({ error: "Missing required parameters" });
+      }
+      
+      if (side !== 'buy' && side !== 'sell') {
+        return res.status(400).json({ error: "Side must be 'buy' or 'sell'" });
+      }
+
+      const formatted = formatPair(symbol);
+      const order = await createLimitOrder(formatted, side, amount, price);
+      
+      // Log the trade in our system
+      const userId = parseInt(req.body.userId);
+      if (userId) {
+        await storage.addTrade({
+          userId,
+          pair: symbol,
+          type: side === 'buy' ? 'limit_buy' : 'limit_sell',  // Include side in the type
+          entryPrice: price.toString(),
+          exitPrice: price.toString(), // Updated when order is filled
+          amount: amount.toString(),
+          result: '0', // Calculated later with actual data
+          botConfigId: req.body.botConfigId ? parseInt(req.body.botConfigId) : null,
+          status: 'open'
+        });
+      }
+      
+      res.json(order);
+    } catch (error: any) {
+      res.status(500).json({ error: `Failed to create limit order: ${error.message}` });
+    }
+  });
+
+  app.get("/api/exchange/orders", async (req: Request, res: Response) => {
+    try {
+      const symbol = req.query.symbol as string;
+      const orders = await getOpenOrders(symbol);
+      res.json(orders);
+    } catch (error: any) {
+      res.status(500).json({ error: `Failed to get open orders: ${error.message}` });
+    }
+  });
+
+  app.delete("/api/exchange/order/:orderId", async (req: Request, res: Response) => {
+    try {
+      const orderId = req.params.orderId;
+      const symbol = req.query.symbol as string;
+      
+      if (!symbol) {
+        return res.status(400).json({ error: "Symbol is required" });
+      }
+      
+      const formatted = formatPair(symbol);
+      const result = await cancelOrder(orderId, formatted);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: `Failed to cancel order: ${error.message}` });
+    }
+  });
+
+  app.get("/api/exchange/order/:orderId", async (req: Request, res: Response) => {
+    try {
+      const orderId = req.params.orderId;
+      const symbol = req.query.symbol as string;
+      
+      if (!symbol) {
+        return res.status(400).json({ error: "Symbol is required" });
+      }
+      
+      const formatted = formatPair(symbol);
+      const order = await getOrderStatus(orderId, formatted);
+      res.json(order);
+    } catch (error: any) {
+      res.status(500).json({ error: `Failed to get order status: ${error.message}` });
+    }
+  });
+
+  app.get("/api/exchange/trades", async (req: Request, res: Response) => {
+    try {
+      const symbol = req.query.symbol as string;
+      const since = req.query.since ? parseInt(req.query.since as string) : undefined;
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+      
+      if (!symbol) {
+        return res.status(400).json({ error: "Symbol is required" });
+      }
+      
+      const formatted = formatPair(symbol);
+      const trades = await getExchangeTradeHistory(formatted, since, limit);
+      res.json(trades);
+    } catch (error: any) {
+      res.status(500).json({ error: `Failed to get trade history: ${error.message}` });
+    }
+  });
+  
+  app.post("/api/exchange/execute-signal", async (req: Request, res: Response) => {
+    try {
+      const { symbol, side, amount, orderType, price, userId, botConfigId } = req.body;
+      
+      if (!symbol || !side || !amount || !orderType) {
+        return res.status(400).json({ error: "Missing required parameters" });
+      }
+      
+      const formatted = formatPair(symbol);
+      const order = await executeTradeSignal(formatted, side, amount, orderType, price);
+      
+      // Log the trade in our system
+      if (userId) {
+        const tradePrice = price || (order.price || order.average || 0) as number;
+        
+        // Create a trade with the correct type that includes the side info
+        const tradeType = orderType === 'market' 
+          ? (side === 'buy' ? 'market_buy' : 'market_sell')
+          : (side === 'buy' ? 'limit_buy' : 'limit_sell');
+          
+        await storage.addTrade({
+          userId: parseInt(userId),
+          pair: symbol,
+          type: tradeType,
+          entryPrice: tradePrice.toString(),
+          exitPrice: tradePrice.toString(), // Updated when order is filled/closed
+          amount: amount.toString(),
+          result: '0', // Calculated later with actual data
+          botConfigId: botConfigId ? parseInt(botConfigId) : null,
+          status: orderType === 'market' ? 'closed' : 'open'
+        });
+        
+        await storage.addBotLog({
+          userId: parseInt(userId),
+          botConfigId: botConfigId ? parseInt(botConfigId) : null,
+          message: `Signal executed: ${side.toUpperCase()} ${amount} ${symbol} at ${tradePrice} (${orderType})`,
+          level: "info"
+        });
+      }
+      
+      res.json(order);
+    } catch (error: any) {
+      res.status(500).json({ error: `Failed to execute trade signal: ${error.message}` });
     }
   });
 

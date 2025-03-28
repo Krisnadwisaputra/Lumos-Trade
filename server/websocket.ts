@@ -137,7 +137,7 @@ function unsubscribeFromMarket(client: WebSocket, market: string) {
 
 // Track number of connection attempts
 const connectionAttempts: Map<string, number> = new Map();
-const MAX_ATTEMPTS = 3;
+const MAX_ATTEMPTS = 1; // Reduced for quicker fallback to simulation mode during testing
 
 // Connect to Binance WebSocket for market data
 function connectToBinanceWebSocket(market: string) {
@@ -222,6 +222,17 @@ function startSimulationForMarket(market: string) {
   }
   
   log(`Starting market data simulation for ${market}`);
+  
+  // Notify all clients that we're switching to simulation mode
+  clients.forEach((subscription, client) => {
+    if (subscription.markets.has(market) && client.readyState === WebSocket.OPEN) {
+      client.send(JSON.stringify({
+        type: 'simulation_started',
+        market: market,
+        message: 'Live data connection failed, using simulated data'
+      }));
+    }
+  });
   
   // Get the initial price for this market to use as a baseline
   let basePrice = market.includes('BTC') ? 45000 : market.includes('ETH') ? 2800 : 100;

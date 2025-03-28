@@ -3,6 +3,7 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { createServer } from "http";
 import { initializeWebSocket } from "./websocket";
+import { initializeExchange } from "./exchange";
 
 const app = express();
 app.use(express.json());
@@ -44,6 +45,9 @@ app.use((req, res, next) => {
   
   // Initialize WebSocket server
   initializeWebSocket(httpServer);
+  
+  // Initialize exchange connection
+  initializeExchange();
   
   // Register API routes
   await registerRoutes(app, httpServer);
