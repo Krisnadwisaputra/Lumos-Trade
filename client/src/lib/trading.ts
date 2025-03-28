@@ -1,150 +1,122 @@
-import { apiRequest } from "./queryClient";
-import { BotConfig, Trade, OrderBlock, BotLog } from "@shared/schema";
+import { apiRequest } from './queryClient';
 
-export interface TradeStats {
-  winRate: number;
-  avgRR: number;
-  totalTrades: number;
-  totalProfit: number;
+// Types for trading functions
+export interface MarketOrder {
+  userId: number;
+  symbol: string;
+  side: 'buy' | 'sell';
+  amount: number;
 }
 
-export interface TradeHistory {
-  trades: Trade[];
-  stats: TradeStats;
+export interface LimitOrder {
+  userId: number;
+  symbol: string;
+  side: 'buy' | 'sell';
+  amount: number;
+  price: number;
 }
 
-// Get user's bot configuration
-export const getBotConfig = async (userId: number): Promise<BotConfig | null> => {
+export interface OrderStatus {
+  id: string;
+  symbol: string;
+  side: string;
+  amount: number;
+  price: number;
+  status: string;
+  timestamp: number;
+}
+
+export interface TradeSignal {
+  userId: number;
+  symbol: string;
+  side: 'buy' | 'sell';
+  amount: number;
+  price?: number;
+  stopLoss?: number;
+  takeProfit?: number;
+  orderType: 'market' | 'limit';
+  strategy: string;
+  notes?: string;
+}
+
+// Trading functions
+export const createMarketOrder = async (order: MarketOrder): Promise<OrderStatus> => {
   try {
-    const response = await fetch(`/api/bot-config/${userId}`, {
-      credentials: 'include'
-    });
-    
-    if (response.status === 404) {
-      return null;
-    }
-    
-    if (!response.ok) {
-      throw new Error(`Failed to get bot config: ${response.statusText}`);
-    }
-    
-    return await response.json();
+    return await apiRequest('POST', '/api/exchange/order/market', order);
   } catch (error) {
-    console.error("Error fetching bot config:", error);
+    console.error('Error creating market order:', error);
     throw error;
   }
 };
 
-// Save bot configuration
-export const saveBotConfig = async (config: Partial<BotConfig>): Promise<BotConfig> => {
+export const createLimitOrder = async (order: LimitOrder): Promise<OrderStatus> => {
   try {
-    const response = await apiRequest("POST", "/api/bot-config", config);
-    return await response.json();
+    return await apiRequest('POST', '/api/exchange/order/limit', order);
   } catch (error) {
-    console.error("Error saving bot config:", error);
+    console.error('Error creating limit order:', error);
     throw error;
   }
 };
 
-// Start bot
-export const startBot = async (configId: number): Promise<void> => {
+export const getOpenOrders = async (userId: number, symbol?: string): Promise<OrderStatus[]> => {
   try {
-    await apiRequest("POST", `/api/bot/${configId}/start`, {});
+    const queryParams = new URLSearchParams();
+    if (symbol) queryParams.append('symbol', symbol);
+    if (userId) queryParams.append('userId', userId.toString());
+    
+    return await apiRequest('GET', `/api/exchange/orders?${queryParams.toString()}`);
   } catch (error) {
-    console.error("Error starting bot:", error);
+    console.error('Error fetching open orders:', error);
     throw error;
   }
 };
 
-// Stop bot
-export const stopBot = async (configId: number): Promise<void> => {
+export const cancelOrder = async (orderId: string, symbol: string): Promise<boolean> => {
   try {
-    await apiRequest("POST", `/api/bot/${configId}/stop`, {});
+    await apiRequest('DELETE', `/api/exchange/order/${orderId}?symbol=${encodeURIComponent(symbol)}`);
+    return true;
   } catch (error) {
-    console.error("Error stopping bot:", error);
+    console.error('Error cancelling order:', error);
     throw error;
   }
 };
 
-// Get trade history
-export const getTradeHistory = async (userId: number, page: number = 1, limit: number = 10): Promise<{trades: Trade[], total: number}> => {
+export const getOrderStatus = async (orderId: string, symbol: string): Promise<OrderStatus> => {
   try {
-    const response = await fetch(`/api/trades/${userId}?page=${page}&limit=${limit}`, {
-      credentials: 'include'
-    });
-    
-    if (!response.ok) {
-      throw new Error(`Failed to get trade history: ${response.statusText}`);
-    }
-    
-    return await response.json();
+    return await apiRequest('GET', `/api/exchange/order/${orderId}?symbol=${encodeURIComponent(symbol)}`);
   } catch (error) {
-    console.error("Error fetching trade history:", error);
+    console.error('Error fetching order status:', error);
     throw error;
   }
 };
 
-// Get trading performance stats
-export const getPerformanceStats = async (userId: number, timeframe: string = 'week'): Promise<TradeStats> => {
+export const getTradeHistory = async (userId: number, symbol?: string): Promise<any[]> => {
   try {
-    const response = await fetch(`/api/stats/${userId}?timeframe=${timeframe}`, {
-      credentials: 'include'
-    });
+    const queryParams = new URLSearchParams();
+    if (symbol) queryParams.append('symbol', symbol);
+    if (userId) queryParams.append('userId', userId.toString());
     
-    if (!response.ok) {
-      throw new Error(`Failed to get performance stats: ${response.statusText}`);
-    }
-    
-    return await response.json();
+    return await apiRequest('GET', `/api/exchange/trades?${queryParams.toString()}`);
   } catch (error) {
-    console.error("Error fetching performance stats:", error);
+    console.error('Error fetching trade history:', error);
     throw error;
   }
 };
 
-// Get order block zones
-export const getOrderBlocks = async (userId: number): Promise<OrderBlock[]> => {
+export const executeTradeSignal = async (signal: TradeSignal): Promise<OrderStatus> => {
   try {
-    const response = await fetch(`/api/order-blocks/${userId}`, {
-      credentials: 'include'
-    });
-    
-    if (!response.ok) {
-      throw new Error(`Failed to get order blocks: ${response.statusText}`);
-    }
-    
-    return await response.json();
+    return await apiRequest('POST', '/api/exchange/execute-signal', signal);
   } catch (error) {
-    console.error("Error fetching order blocks:", error);
+    console.error('Error executing trade signal:', error);
     throw error;
   }
 };
 
-// Get bot logs
-export const getBotLogs = async (userId: number, limit: number = 20): Promise<BotLog[]> => {
+export const getCurrentPrice = async (symbol: string): Promise<{ price: number, timestamp: number }> => {
   try {
-    const response = await fetch(`/api/bot-logs/${userId}?limit=${limit}`, {
-      credentials: 'include'
-    });
-    
-    if (!response.ok) {
-      throw new Error(`Failed to get bot logs: ${response.statusText}`);
-    }
-    
-    return await response.json();
+    return await apiRequest('GET', `/api/exchange/price?symbol=${encodeURIComponent(symbol)}`);
   } catch (error) {
-    console.error("Error fetching bot logs:", error);
-    throw error;
-  }
-};
-
-// Add manual trade entry
-export const addManualTrade = async (trade: Partial<Trade>): Promise<Trade> => {
-  try {
-    const response = await apiRequest("POST", "/api/trades", trade);
-    return await response.json();
-  } catch (error) {
-    console.error("Error adding manual trade:", error);
+    console.error('Error fetching current price:', error);
     throw error;
   }
 };
