@@ -8,6 +8,7 @@ import Dashboard from "@/pages/Dashboard";
 import LoginModal from "@/components/LoginModal";
 import { initializeFirebase, auth, handleGoogleRedirect } from "./lib/firebase";
 import { User } from "firebase/auth";
+import { webSocketService } from "./lib/webSocketService";
 
 function Router() {
   const [user, setUser] = useState<User | null>(null);
@@ -106,6 +107,24 @@ function Router() {
 }
 
 function App() {
+  // Initialize WebSocket connection when app starts
+  useEffect(() => {
+    // Connect to WebSocket server
+    webSocketService.connect()
+      .then(() => {
+        console.log("WebSocket service initialized at application start");
+      })
+      .catch(error => {
+        console.error("Failed to initialize WebSocket service:", error);
+      });
+      
+    // Clean up WebSocket connection when app is closed
+    return () => {
+      // Only disconnect on app shutdown
+      webSocketService.disconnect();
+    };
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <Router />

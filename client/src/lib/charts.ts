@@ -1,5 +1,6 @@
 import * as LightweightCharts from 'lightweight-charts';
 import { getTimeAsNumber, calculateEMA as calculateEMAHelper } from './chartHelpers';
+import { webSocketService } from './webSocketService';
 
 // Import series types for v5
 const { CandlestickSeries, LineSeries } = LightweightCharts;
@@ -13,6 +14,7 @@ interface ChartData {
   high: number;
   low: number;
   close: number;
+  volume?: number;
 }
 
 // Custom interface for our data structure
@@ -22,6 +24,18 @@ interface CustomChartData {
   high: number;
   low: number;
   close: number;
+  volume?: number;
+}
+
+// Type for real-time updates from WebSocket
+interface RealtimeUpdate {
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  complete: boolean;
 }
 
 interface EMASeries {
@@ -92,14 +106,100 @@ export class TradingChart {
     this.currentPair = pair;
     this.currentTimeframe = timeframe;
     
+    // Unsubscribe from previous WebSocket connection if different pair
+    this.unsubscribeFromRealTimeUpdates();
+    
     try {
       const response = await fetch(`/api/chart-data?pair=${pair}&timeframe=${timeframe}`);
       if (!response.ok) throw new Error('Failed to fetch chart data');
       
       const data = await response.json();
       this.updateChart(data);
+      
+      // Connect to WebSocket and subscribe to real-time updates
+      this.subscribeToRealTimeUpdates();
     } catch (error) {
       console.error('Error loading chart data:', error);
+    }
+  }
+  
+  // Subscribe to real-time updates via WebSocket
+  private subscribeToRealTimeUpdates() {
+    try {
+      // Connect to WebSocket service if not already connected
+      webSocketService.connect().then(() => {
+        // Subscribe to the current trading pair
+        webSocketService.subscribeToMarket(this.currentPair, this.handleRealTimeUpdate);
+        console.log(`Subscribed to real-time updates for ${this.currentPair}`);
+      }).catch(error => {
+        console.error('Failed to connect to WebSocket:', error);
+      });
+    } catch (error) {
+      console.error('Error subscribing to real-time updates:', error);
+    }
+  }
+  
+  // Unsubscribe from real-time updates
+  private unsubscribeFromRealTimeUpdates() {
+    try {
+      webSocketService.unsubscribeFromMarket(this.currentPair, this.handleRealTimeUpdate);
+      console.log(`Unsubscribed from real-time updates for ${this.currentPair}`);
+    } catch (error) {
+      console.error('Error unsubscribing from real-time updates:', error);
+    }
+  }
+  
+  // Handle incoming real-time data
+  private handleRealTimeUpdate = (update: RealtimeUpdate) => {
+    try {
+      if (!update || !update.time) {
+        console.error('Invalid real-time update received:', update);
+        return;
+      }
+      
+      // Format the timestamp to match our date format
+      const timestamp = update.time;
+      const date = new Date(timestamp * 1000);
+      const year = date.getUTCFullYear();
+      const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(date.getUTCDate()).padStart(2, '0');
+      const hour = String(date.getUTCHours()).padStart(2, '0');
+      const minute = String(date.getUTCMinutes()).padStart(2, '0');
+      
+      // For minute timeframes, use a more detailed time format
+      let formattedTime: string;
+      if (this.currentTimeframe.includes('m')) {
+        formattedTime = `${year}-${month}-${day} ${hour}:${minute}`;
+      } else {
+        formattedTime = `${year}-${month}-${day}`;
+      }
+      
+      // Update the candlestick
+      const candleData = {
+        time: formattedTime,
+        open: update.open,
+        high: update.high,
+        low: update.low,
+        close: update.close
+      };
+      
+      console.log(`Real-time update for ${this.currentPair}: ${JSON.stringify(candleData)}`);
+      
+      // Update the chart with the latest candle
+      this.candleSeries.update(candleData);
+      
+      // Recalculate EMA values if any are active
+      // Note: In a production app, you'd want to calculate this on the server side
+      // and send updates via WebSocket for better performance
+      for (const period in this.emaSeries) {
+        if (this.emaSeries.hasOwnProperty(period)) {
+          // Placeholder for EMA update - in real implementation, you would
+          // recalculate EMA or subscribe to EMA updates from the server
+          console.log(`Would update EMA ${period} with latest candle`);
+        }
+      }
+    } catch (error) {
+      console.error('Error handling real-time update:', error);
     }
   }
 
@@ -304,7 +404,13 @@ export class TradingChart {
   }
 
   destroy() {
+    // Clean up WebSocket subscriptions
+    this.unsubscribeFromRealTimeUpdates();
+    
+    // Remove event listeners
     window.removeEventListener('resize', this.handleResize);
+    
+    // Clean up chart
     this.chart.remove();
   }
 }

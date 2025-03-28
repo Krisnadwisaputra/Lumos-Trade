@@ -8,6 +8,7 @@ import TradingJournal from "@/components/TradingJournal";
 import PerformanceMetrics from "@/components/PerformanceMetrics";
 import OBZoneStats from "@/components/OBZoneStats";
 import AutoTradeLogs from "@/components/AutoTradeLogs";
+import ConnectionStatus from "@/components/ConnectionStatus";
 import { apiRequest } from "@/lib/queryClient";
 
 interface DashboardProps {
@@ -93,10 +94,13 @@ const Dashboard = ({ user }: DashboardProps) => {
       
       {userId ? (
         <>
-          <AutoTradingPanel 
-            userId={userId} 
-            onBotStatusChange={handleBotStatusChange} 
-          />
+          <div className="flex items-center justify-between mb-6">
+            <AutoTradingPanel 
+              userId={userId} 
+              onBotStatusChange={handleBotStatusChange} 
+            />
+            <ConnectionStatus className="ml-auto" />
+          </div>
           
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Main content - left 2/3 */}
