@@ -1,134 +1,81 @@
-import { useState, useEffect } from "react";
-import { Switch, Route } from "wouter";
-import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider } from "@tanstack/react-query";
-import { Toaster } from "@/components/ui/toaster";
-import NotFound from "@/pages/not-found";
-import Dashboard from "@/pages/Dashboard";
-import LoginModal from "@/components/LoginModal";
-import { initializeFirebase, auth, handleGoogleRedirect } from "./lib/firebase";
-import { User } from "firebase/auth";
-import { webSocketService } from "./lib/webSocketService";
+import { useState, useEffect } from 'react';
+import { Route, Switch } from 'wouter';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { Toaster } from '@/components/ui/toaster';
+import { queryClient } from '@/lib/queryClient';
+import { onAuthChange } from '@/lib/firebase';
+import { User } from 'firebase/auth';
+import Dashboard from '@/pages/Dashboard';
+import NotFound from '@/pages/not-found';
+import LoginModal from '@/components/LoginModal';
 
-function Router() {
-  const [user, setUser] = useState<User | null>(null);
+function App() {
+  const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [showLoginModal, setShowLoginModal] = useState(false);
 
   useEffect(() => {
-    // Initialize Firebase first
-    const app = initializeFirebase();
-    
-    // Check for Google redirect result
-    async function checkGoogleRedirect() {
-      if (auth) {
-        try {
-          const redirectUser = await handleGoogleRedirect();
-          // User will be set by the auth state listener below if redirect was successful
-        } catch (error) {
-          console.error("Error handling Google redirect:", error);
-        }
-      }
-    }
-    
-    checkGoogleRedirect();
-    
-    // Listen for auth state changes
-    let unsubscribe: () => void;
-    if (auth) {
-      unsubscribe = auth.onAuthStateChanged((authUser: any) => {
-        if (authUser) {
-          // When user is authenticated, automatically create or get user from API
-          // This will sync Firebase auth user with backend user data
-          fetch(`/api/users/by-firebase/${authUser.uid}`)
-            .then(response => {
-              if (response.status === 404) {
-                // User doesn't exist in backend, create user
-                return fetch('/api/users', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    email: authUser.email,
-                    username: authUser.displayName || authUser.email.split('@')[0],
-                    firebaseUid: authUser.uid,
-                    password: "firebase-auth" // Required field in our schema
-                  })
-                });
-              }
-              return response;
-            })
-            .then(response => {
-              if (!response.ok) {
-                throw new Error('Failed to get or create user');
-              }
-              return response.json();
-            })
-            .then(userData => {
-              console.log('User data synchronized with backend:', userData);
-              // We keep the Firebase user object, backend sync is just for data consistency
-            })
-            .catch(error => {
-              console.error('Error syncing user data with backend:', error);
-            })
-            .finally(() => {
-              setUser(authUser);
-              setLoading(false);
-            });
-        } else {
-          setUser(null);
-          setLoading(false);
-        }
-      });
-    } else {
+    // Listen for authentication state changes
+    const unsubscribe = onAuthChange((authUser) => {
+      setUser(authUser);
       setLoading(false);
-    }
+    });
 
-    return () => {
-      if (unsubscribe) unsubscribe();
-    };
+    // Cleanup subscription on unmount
+    return () => unsubscribe();
   }, []);
+
+  useEffect(() => {
+    // If user is not logged in after initialization, show login modal
+    if (!loading && !user) {
+      setShowLoginModal(true);
+    }
+  }, [loading, user]);
+
+  const handleUserAuthenticated = (authenticatedUser: any) => {
+    setUser(authenticatedUser);
+    setShowLoginModal(false);
+  };
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="flex justify-center items-center h-screen">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
       </div>
     );
   }
 
   return (
-    <>
-      {!user && <LoginModal />}
-      <Switch>
-        <Route path="/" component={() => user ? <Dashboard user={user} /> : <div className="hidden"></div>} />
-        <Route component={NotFound} />
-      </Switch>
-    </>
-  );
-}
-
-function App() {
-  // Initialize WebSocket connection when app starts
-  useEffect(() => {
-    // Connect to WebSocket server
-    webSocketService.connect()
-      .then(() => {
-        console.log("WebSocket service initialized at application start");
-      })
-      .catch(error => {
-        console.error("Failed to initialize WebSocket service:", error);
-      });
-      
-    // Clean up WebSocket connection when app is closed
-    return () => {
-      // Only disconnect on app shutdown
-      webSocketService.disconnect();
-    };
-  }, []);
-
-  return (
     <QueryClientProvider client={queryClient}>
-      <Router />
-      <Toaster />
+      <div className="min-h-screen bg-background">
+        <LoginModal 
+          open={showLoginModal} 
+          onOpenChange={setShowLoginModal}
+          onUserAuthenticated={handleUserAuthenticated}
+        />
+        
+        <Switch>
+          <Route path="/">
+            {user ? (
+              <Dashboard user={user} />
+            ) : (
+              <div className="flex justify-center items-center h-screen">
+                <button 
+                  className="px-4 py-2 bg-primary text-primary-foreground rounded"
+                  onClick={() => setShowLoginModal(true)}
+                >
+                  Login to continue
+                </button>
+              </div>
+            )}
+          </Route>
+          <Route>
+            <NotFound />
+          </Route>
+        </Switch>
+        
+        <Toaster />
+      </div>
     </QueryClientProvider>
   );
 }

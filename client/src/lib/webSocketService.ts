@@ -1,244 +1,120 @@
-// WebSocket types
-export type WebSocketMessage = {
-  type: string;
-  market?: string;
-  status?: string;
-  data?: any;
-  source?: 'simulation' | 'live';
-  message?: string;
-};
-
 type WebSocketCallback = (data: any) => void;
+type WebSocketState = 'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'error' | 'simulated';
 
-export class WebSocketService {
-  private socket: WebSocket | null = null;
-  private isConnected: boolean = false;
-  private reconnectTimer: NodeJS.Timeout | null = null;
-  private reconnectInterval: number = 5000;
-  private url: string = '';
-  private marketSubscriptions: Map<string, Set<WebSocketCallback>> = new Map();
-  
+class WebSocketService {
+  private subscriptions: Map<string, Set<WebSocketCallback>> = new Map();
+  private simulationIntervals: Map<string, NodeJS.Timeout> = new Map();
+  private state: WebSocketState = 'simulated';
+
   constructor() {
-    // Don't try to access window during SSR
+    console.log('WebSocket Service initialized in simulation mode');
+    // Only dispatch event if we're in a browser environment
     if (typeof window !== 'undefined') {
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      // Ensure we're using the same path as server-side (/ws)
-      this.url = `${protocol}//${window.location.host}/ws`;
+      // Dispatch a custom event for simulation mode
+      const event = new CustomEvent('ws:simulated');
+      window.dispatchEvent(event);
     }
   }
-  
-  // Connect to WebSocket server
-  public connect(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      // Check if we're in a browser environment
-      if (typeof window === 'undefined') {
-        // Skip WebSocket connection in non-browser environment
-        resolve();
-        return;
-      }
-      
-      if (this.socket?.readyState === WebSocket.OPEN) {
-        resolve();
-        return;
-      }
-      
-      // Check if URL is set (should be set in browser environment)
-      if (!this.url) {
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        this.url = `${protocol}//${window.location.host}/ws`;
-      }
-      
-      this.socket = new WebSocket(this.url);
-      
-      this.socket.onopen = () => {
-        console.log('WebSocket connection established');
-        this.isConnected = true;
-        this.reconnectSubscriptions();
-        
-        // Dispatch a custom event for connected state
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('ws-connected'));
-        }
-        
-        resolve();
-      };
-      
-      this.socket.onclose = () => {
-        console.log('WebSocket connection closed');
-        this.isConnected = false;
-        
-        // Dispatch a custom event for disconnected state
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('ws-disconnected'));
-        }
-        
-        this.scheduleReconnect();
-      };
-      
-      this.socket.onerror = (error) => {
-        console.error('WebSocket error:', error);
-        
-        // Dispatch a custom event for error state
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('ws-error', { detail: error }));
-        }
-        
-        reject(error);
-      };
-      
-      this.socket.onmessage = (event) => {
-        try {
-          const message = JSON.parse(event.data) as WebSocketMessage;
-          this.handleMessage(message);
-        } catch (error) {
-          console.error('Error parsing WebSocket message:', error);
-        }
-      };
-    });
-  }
-  
-  // Subscribe to real-time updates for a specific market
-  public subscribeToMarket(market: string, callback: WebSocketCallback): void {
-    if (!this.marketSubscriptions.has(market)) {
-      this.marketSubscriptions.set(market, new Set());
-      
-      // Send subscription request to server if connected
-      if (this.isConnected && this.socket?.readyState === WebSocket.OPEN) {
-        const message = {
-          action: 'subscribe',
-          market
-        };
-        this.socket.send(JSON.stringify(message));
-      }
-    }
+
+  private startSimulation(market: string) {
+    if (this.simulationIntervals.has(market)) return;
     
-    // Add callback to subscribers
-    const callbacks = this.marketSubscriptions.get(market);
-    callbacks?.add(callback);
-  }
-  
-  // Unsubscribe from market updates
-  public unsubscribeFromMarket(market: string, callback: WebSocketCallback): void {
-    const callbacks = this.marketSubscriptions.get(market);
+    console.log(`Starting simulation for ${market}`);
     
-    if (callbacks) {
-      callbacks.delete(callback);
-      
-      // If no more callbacks, unsubscribe from server
-      if (callbacks.size === 0) {
-        this.marketSubscriptions.delete(market);
-        
-        if (this.isConnected && this.socket?.readyState === WebSocket.OPEN) {
-          const message = {
-            action: 'unsubscribe',
-            market
-          };
-          this.socket.send(JSON.stringify(message));
-        }
-      }
-    }
-  }
-  
-  // Close the WebSocket connection
-  public disconnect(): void {
-    if (this.socket) {
-      this.socket.close();
-      this.socket = null;
-      this.isConnected = false;
-      
-      if (this.reconnectTimer) {
-        clearTimeout(this.reconnectTimer);
-        this.reconnectTimer = null;
-      }
-    }
-  }
-  
-  // Handle incoming WebSocket messages
-  private handleMessage(message: WebSocketMessage): void {
-    switch (message.type) {
-      case 'connection':
-        console.log(`WebSocket connection status: ${message.status}`);
+    // Parse the market to get the base currency for price simulation
+    const [base] = market.split('/');
+    let basePrice = 0;
+    
+    switch (base) {
+      case 'BTC':
+        basePrice = 43500;
         break;
-        
-      case 'subscription':
-        console.log(`Market ${message.market} subscription status: ${message.status}`);
+      case 'ETH':
+        basePrice = 2300;
         break;
-        
-      case 'simulation_started':
-        console.log(`Switching to simulation mode for ${message.market}: ${message.message}`);
-        
-        // Dispatch a custom event for simulation mode
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('ws-simulation', { 
-            detail: { market: message.market } 
-          }));
-        }
+      case 'SOL':
+        basePrice = 110;
         break;
-        
-      case 'kline':
-        // Notify subscribers for this market
-        const market = message.market || '';
-        const callbacks = this.marketSubscriptions.get(market);
-        
-        // Check if this is simulated data
-        if (message.source === 'simulation' && typeof window !== 'undefined') {
-          // Ensure we're showing simulation status
-          window.dispatchEvent(new CustomEvent('ws-simulation', { 
-            detail: { market }
-          }));
-        }
-        
-        if (callbacks) {
-          callbacks.forEach(callback => {
-            try {
-              callback(message.data);
-            } catch (error) {
-              console.error('Error in market data callback:', error);
-            }
-          });
-        }
+      case 'BNB':
+        basePrice = 350;
         break;
-        
-      case 'error':
-        console.error('WebSocket error from server:', message.data);
-        break;
-        
       default:
-        console.log('Unhandled WebSocket message type:', message.type, message);
+        basePrice = 100;
     }
-  }
-  
-  // Schedule reconnection
-  private scheduleReconnect(): void {
-    if (!this.reconnectTimer) {
-      console.log(`Scheduling WebSocket reconnect in ${this.reconnectInterval / 1000}s`);
-      this.reconnectTimer = setTimeout(() => {
-        this.reconnectTimer = null;
-        this.connect().catch(error => {
-          console.error('Failed to reconnect WebSocket:', error);
-          this.scheduleReconnect();
-        });
-      }, this.reconnectInterval);
-    }
-  }
-  
-  // Resubscribe to all markets after reconnection
-  private reconnectSubscriptions(): void {
-    if (this.marketSubscriptions.size > 0 && this.socket?.readyState === WebSocket.OPEN) {
-      const markets = Array.from(this.marketSubscriptions.keys());
+    
+    const interval = setInterval(() => {
+      // Generate random price movement within +/- 0.2%
+      const priceChange = (Math.random() - 0.5) * 0.004; // -0.2% to +0.2%
+      const newPrice = basePrice * (1 + priceChange);
+      basePrice = newPrice;
       
-      if (markets.length > 0) {
-        const message = {
-          action: 'subscribe_multiple',
-          markets
-        };
-        
-        this.socket.send(JSON.stringify(message));
-        console.log('Resubscribed to markets:', markets);
+      const simulatedData = {
+        market,
+        simulated: true,
+        time: Date.now() / 1000, // Unix timestamp in seconds
+        open: newPrice * (1 - Math.random() * 0.001),
+        high: newPrice * (1 + Math.random() * 0.001),
+        low: newPrice * (1 - Math.random() * 0.001),
+        close: newPrice,
+        volume: Math.random() * 10,
+        complete: Math.random() > 0.8 // 80% chance of being complete
+      };
+      
+      const callbacks = this.subscriptions.get(market);
+      if (callbacks) {
+        callbacks.forEach(callback => callback(simulatedData));
       }
+    }, 2000); // Simulate data every 2 seconds
+    
+    this.simulationIntervals.set(market, interval);
+  }
+
+  private stopSimulation(market: string) {
+    const interval = this.simulationIntervals.get(market);
+    if (interval) {
+      clearInterval(interval);
+      this.simulationIntervals.delete(market);
     }
+  }
+
+  public subscribe(market: string, callback: WebSocketCallback) {
+    if (!this.subscriptions.has(market)) {
+      this.subscriptions.set(market, new Set());
+      this.startSimulation(market);
+    }
+    
+    this.subscriptions.get(market)?.add(callback);
+    
+    return () => {
+      this.unsubscribe(market, callback);
+    };
+  }
+
+  public unsubscribe(market: string, callback: WebSocketCallback) {
+    const callbacks = this.subscriptions.get(market);
+    if (!callbacks) return;
+    
+    callbacks.delete(callback);
+    
+    if (callbacks.size === 0) {
+      this.subscriptions.delete(market);
+      this.stopSimulation(market);
+    }
+  }
+
+  public getState(): WebSocketState {
+    return this.state;
+  }
+
+  public close() {
+    // Stop all simulations
+    this.simulationIntervals.forEach((interval) => clearInterval(interval));
+    this.simulationIntervals.clear();
+    this.subscriptions.clear();
   }
 }
 
-// Singleton instance of WebSocketService
-export const webSocketService = new WebSocketService();
+// Create a singleton instance
+const webSocketService = new WebSocketService();
+
+export default webSocketService;

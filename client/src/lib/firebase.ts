@@ -1,80 +1,84 @@
 import { initializeApp } from "firebase/app";
 import { 
   getAuth, 
-  createUserWithEmailAndPassword, 
-  signInWithEmailAndPassword, 
-  signOut,
+  signInWithRedirect, 
+  GoogleAuthProvider, 
+  getRedirectResult, 
   onAuthStateChanged,
-  User,
-  GoogleAuthProvider,
-  signInWithPopup,
-  signInWithRedirect,
-  getRedirectResult
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signOut as firebaseSignOut,
+  User
 } from "firebase/auth";
-
-let firebaseInitialized = false;
 
 // Firebase configuration
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "",
-  authDomain: `${import.meta.env.VITE_FIREBASE_PROJECT_ID || ""}.firebaseapp.com`,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "",
-  storageBucket: `${import.meta.env.VITE_FIREBASE_PROJECT_ID || ""}.appspot.com`,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "",
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || ""
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: `${import.meta.env.VITE_FIREBASE_PROJECT_ID}.firebaseapp.com`,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: `${import.meta.env.VITE_FIREBASE_PROJECT_ID}.appspot.com`,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
-// Initialize Firebase and get auth instance
-let app: ReturnType<typeof initializeApp>;
-export let auth: ReturnType<typeof getAuth>;
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const googleProvider = new GoogleAuthProvider();
 
-export const initializeFirebase = () => {
-  if (!firebaseInitialized) {
-    app = initializeApp(firebaseConfig);
-    auth = getAuth(app);
-    firebaseInitialized = true;
-  }
-  return app;
+// Functions for authentication
+export const signInWithGoogle = () => {
+  return signInWithRedirect(auth, googleProvider);
 };
 
-export const registerUser = async (email: string, password: string): Promise<User> => {
-  const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-  return userCredential.user;
-};
+// For backward compatibility with existing codebase
+export const signInWithGoogleRedirect = signInWithGoogle;
 
-export const loginUser = async (email: string, password: string): Promise<User> => {
-  const userCredential = await signInWithEmailAndPassword(auth, email, password);
-  return userCredential.user;
-};
-
-export const logoutUser = async (): Promise<void> => {
-  await signOut(auth);
-};
-
-export const getCurrentUser = (): User | null => {
-  return auth.currentUser;
-};
-
-export const signInWithGoogle = async (): Promise<User> => {
-  const provider = new GoogleAuthProvider();
-  const result = await signInWithPopup(auth, provider);
-  return result.user;
-};
-
-export const signInWithGoogleRedirect = async (): Promise<void> => {
-  const provider = new GoogleAuthProvider();
-  await signInWithRedirect(auth, provider);
-};
-
-export const handleGoogleRedirect = async (): Promise<User | null> => {
+export const handleAuthRedirect = async () => {
   try {
     const result = await getRedirectResult(auth);
     if (result) {
+      // User successfully authenticated
       return result.user;
     }
     return null;
   } catch (error) {
-    console.error("Error handling Google redirect", error);
-    return null;
+    console.error("Error during authentication redirect:", error);
+    throw error;
   }
 };
+
+// Login with email/password
+export const loginUser = async (email: string, password: string) => {
+  try {
+    const userCredential = await signInWithEmailAndPassword(auth, email, password);
+    return userCredential.user;
+  } catch (error) {
+    console.error("Error signing in:", error);
+    throw error;
+  }
+};
+
+// Register new user with email/password
+export const registerUser = async (email: string, password: string) => {
+  try {
+    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    return userCredential.user;
+  } catch (error) {
+    console.error("Error registering user:", error);
+    throw error;
+  }
+};
+
+// Sign out
+export const logoutUser = () => {
+  return firebaseSignOut(auth);
+};
+
+// Auth state change listener
+export const onAuthChange = (callback: (user: User | null) => void) => {
+  return onAuthStateChanged(auth, callback);
+};
+
+export { auth };
+export default app;

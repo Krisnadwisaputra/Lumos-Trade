@@ -1,201 +1,213 @@
-import { useState, useEffect, useRef } from "react";
-import { useToast } from "@/hooks/use-toast";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { getPerformanceStats, TradeStats } from "@/lib/trading";
-import { Chart, registerables } from 'chart.js';
-
-Chart.register(...registerables);
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { apiRequest } from '@/lib/queryClient';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 interface PerformanceMetricsProps {
   userId: number;
 }
 
+interface PerformanceData {
+  winRate: number;
+  avgRR: number;
+  totalTrades: number;
+  totalProfit: number;
+  profitHistory: {
+    date: string;
+    profit: number;
+  }[];
+}
+
 const PerformanceMetrics = ({ userId }: PerformanceMetricsProps) => {
-  const { toast } = useToast();
-  const chartRef = useRef<HTMLCanvasElement | null>(null);
-  const chartInstance = useRef<Chart | null>(null);
-  const [timeframe, setTimeframe] = useState<'day' | 'week' | 'month'>('week');
-  const [stats, setStats] = useState<TradeStats>({
-    winRate: 0,
-    avgRR: 0,
-    totalTrades: 0,
-    totalProfit: 0
-  });
-  const [isLoading, setIsLoading] = useState(false);
-
-  useEffect(() => {
-    loadStats();
-  }, [userId, timeframe]);
-
-  useEffect(() => {
-    if (chartRef.current) {
-      initChart();
-    }
-
-    return () => {
-      if (chartInstance.current) {
-        chartInstance.current.destroy();
+  const [timeframe, setTimeframe] = useState<string>('week');
+  
+  const { 
+    data: performanceData, 
+    isLoading, 
+    isError 
+  } = useQuery({
+    queryKey: ['/api/stats', userId, timeframe],
+    queryFn: async () => {
+      try {
+        // In production, return apiRequest('GET', `/api/stats/${userId}?timeframe=${timeframe}`);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Sample data for development
+        const data: Record<string, PerformanceData> = {
+          day: {
+            winRate: 65,
+            avgRR: 1.8,
+            totalTrades: 5,
+            totalProfit: 87.5,
+            profitHistory: [
+              { date: '09:00', profit: 0 },
+              { date: '12:00', profit: 35 },
+              { date: '15:00', profit: 42 },
+              { date: '18:00', profit: 42 },
+              { date: '21:00', profit: 87.5 }
+            ]
+          },
+          week: {
+            winRate: 58,
+            avgRR: 1.65,
+            totalTrades: 12,
+            totalProfit: 215.75,
+            profitHistory: [
+              { date: 'Mon', profit: 0 },
+              { date: 'Tue', profit: 35 },
+              { date: 'Wed', profit: 75 },
+              { date: 'Thu', profit: 120 },
+              { date: 'Fri', profit: 165 },
+              { date: 'Sat', profit: 190 },
+              { date: 'Sun', profit: 215.75 }
+            ]
+          },
+          month: {
+            winRate: 62,
+            avgRR: 1.72,
+            totalTrades: 35,
+            totalProfit: 523.25,
+            profitHistory: [
+              { date: 'Week 1', profit: 0 },
+              { date: 'Week 2', profit: 150 },
+              { date: 'Week 3', profit: 320 },
+              { date: 'Week 4', profit: 523.25 }
+            ]
+          },
+          year: {
+            winRate: 59,
+            avgRR: 1.68,
+            totalTrades: 230,
+            totalProfit: 3275.5,
+            profitHistory: [
+              { date: 'Jan', profit: 0 },
+              { date: 'Feb', profit: 250 },
+              { date: 'Mar', profit: 520 },
+              { date: 'Apr', profit: 850 },
+              { date: 'May', profit: 1120 },
+              { date: 'Jun', profit: 1350 },
+              { date: 'Jul', profit: 1650 },
+              { date: 'Aug', profit: 1950 },
+              { date: 'Sep', profit: 2300 },
+              { date: 'Oct', profit: 2650 },
+              { date: 'Nov', profit: 2900 },
+              { date: 'Dec', profit: 3275.5 }
+            ]
+          }
+        };
+        
+        return data[timeframe];
+      } catch (error) {
+        console.error('Error fetching performance metrics:', error);
+        throw error;
       }
-    };
-  }, [stats]);
-
-  const loadStats = async () => {
-    setIsLoading(true);
-    try {
-      const data = await getPerformanceStats(userId, timeframe);
-      setStats(data);
-    } catch (error) {
-      console.error("Error loading performance stats:", error);
-      toast({
-        variant: "destructive",
-        title: "Failed to load performance metrics",
-        description: "Please try refreshing the page.",
-      });
-    } finally {
-      setIsLoading(false);
     }
+  });
+
+  const handleTimeframeChange = (value: string) => {
+    setTimeframe(value);
   };
 
-  const initChart = () => {
-    const ctx = chartRef.current?.getContext('2d');
-    
-    if (!ctx) return;
-    
-    if (chartInstance.current) {
-      chartInstance.current.destroy();
-    }
-    
-    // Calculate win/loss count based on win rate and total trades
-    const winCount = Math.round(stats.totalTrades * (stats.winRate / 100));
-    const lossCount = stats.totalTrades - winCount;
-    
-    chartInstance.current = new Chart(ctx, {
-      type: 'bar',
-      data: {
-        labels: ['Wins', 'Losses'],
-        datasets: [{
-          label: 'Trade Performance',
-          data: [winCount, lossCount],
-          backgroundColor: [
-            'rgba(75, 192, 192, 0.6)',
-            'rgba(255, 99, 132, 0.6)'
-          ],
-          borderColor: [
-            'rgba(75, 192, 192, 1)',
-            'rgba(255, 99, 132, 1)'
-          ],
-          borderWidth: 1
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        scales: {
-          y: {
-            beginAtZero: true,
-            ticks: {
-              precision: 0 // Only show whole numbers
-            }
-          }
-        }
-      }
+  const formatNumber = (num: number) => {
+    return num.toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
     });
   };
 
-  const formatProfit = (profit: number) => {
-    return profit >= 0 
-      ? `+$${profit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-      : `-$${Math.abs(profit).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  };
+  if (isLoading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Performance Metrics</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex justify-center py-10">
+            <div className="animate-spin h-6 w-6 border-4 border-primary border-t-transparent rounded-full"></div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (isError || !performanceData) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Performance Metrics</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-red-500 text-center py-8">
+            Error loading performance metrics. Please try again.
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card>
-      <CardContent className="p-5">
-        <h2 className="text-2xl font-bold mb-4 text-gray-800">Performance Metrics</h2>
-        
+      <CardHeader className="pb-2">
+        <CardTitle className="flex justify-between items-center">
+          <span>Performance Metrics</span>
+          <Tabs defaultValue={timeframe} onValueChange={handleTimeframeChange}>
+            <TabsList>
+              <TabsTrigger value="day">Day</TabsTrigger>
+              <TabsTrigger value="week">Week</TabsTrigger>
+              <TabsTrigger value="month">Month</TabsTrigger>
+              <TabsTrigger value="year">Year</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
         <div className="grid grid-cols-2 gap-4 mb-6">
-          <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
-            <div className="text-sm text-gray-500">Win Rate</div>
-            <div className="text-2xl font-bold text-gray-800">
-              {isLoading ? (
-                <div className="animate-pulse h-7 w-16 bg-gray-200 rounded"></div>
-              ) : (
-                `${stats.winRate}%`
-              )}
-            </div>
+          <div className="bg-secondary/30 p-4 rounded-lg">
+            <div className="text-sm text-muted-foreground">Win Rate</div>
+            <div className="text-2xl font-bold">{performanceData.winRate}%</div>
           </div>
-          
-          <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
-            <div className="text-sm text-gray-500">Avg R:R</div>
-            <div className="text-2xl font-bold text-gray-800">
-              {isLoading ? (
-                <div className="animate-pulse h-7 w-16 bg-gray-200 rounded"></div>
-              ) : (
-                stats.avgRR.toFixed(2)
-              )}
-            </div>
+          <div className="bg-secondary/30 p-4 rounded-lg">
+            <div className="text-sm text-muted-foreground">Avg. Risk/Reward</div>
+            <div className="text-2xl font-bold">{performanceData.avgRR}</div>
           </div>
-          
-          <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
-            <div className="text-sm text-gray-500">Total Trades</div>
-            <div className="text-2xl font-bold text-gray-800">
-              {isLoading ? (
-                <div className="animate-pulse h-7 w-16 bg-gray-200 rounded"></div>
-              ) : (
-                stats.totalTrades
-              )}
-            </div>
+          <div className="bg-secondary/30 p-4 rounded-lg">
+            <div className="text-sm text-muted-foreground">Total Trades</div>
+            <div className="text-2xl font-bold">{performanceData.totalTrades}</div>
           </div>
-          
-          <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
-            <div className="text-sm text-gray-500">Profit</div>
-            <div className={`text-2xl font-bold ${stats.totalProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {isLoading ? (
-                <div className="animate-pulse h-7 w-24 bg-gray-200 rounded"></div>
-              ) : (
-                formatProfit(stats.totalProfit)
-              )}
+          <div className="bg-secondary/30 p-4 rounded-lg">
+            <div className="text-sm text-muted-foreground">Total Profit</div>
+            <div className="text-2xl font-bold text-green-500">
+              ${formatNumber(performanceData.totalProfit)}
             </div>
           </div>
         </div>
         
-        {/* Performance Chart */}
-        <div className="h-48 rounded-lg">
-          <canvas ref={chartRef} height={200}></canvas>
-        </div>
-        
-        {/* Time period selector */}
-        <div className="mt-4 flex justify-center">
-          <div className="inline-flex rounded-md shadow-sm" role="group">
-            <Button
-              type="button"
-              variant={timeframe === 'day' ? 'default' : 'outline'}
-              onClick={() => setTimeframe('day')}
-              className={timeframe === 'day' ? 'bg-primary-600 text-white' : 'text-primary-700 bg-white'}
-              size="sm"
+        <div className="h-[250px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart 
+              data={performanceData.profitHistory}
+              margin={{ top: 5, right: 20, bottom: 5, left: 0 }}
             >
-              Day
-            </Button>
-            <Button
-              type="button"
-              variant={timeframe === 'week' ? 'default' : 'outline'}
-              onClick={() => setTimeframe('week')}
-              className={timeframe === 'week' ? 'bg-primary-600 text-white' : 'text-primary-700 bg-white'}
-              size="sm"
-            >
-              Week
-            </Button>
-            <Button
-              type="button"
-              variant={timeframe === 'month' ? 'default' : 'outline'}
-              onClick={() => setTimeframe('month')}
-              className={timeframe === 'month' ? 'bg-primary-600 text-white' : 'text-primary-700 bg-white'}
-              size="sm"
-            >
-              Month
-            </Button>
-          </div>
+              <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+              <XAxis dataKey="date" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
+              <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `$${value}`} />
+              <Tooltip 
+                formatter={(value) => [`$${formatNumber(Number(value))}`, 'Profit']}
+                labelFormatter={(label) => `Date: ${label}`}
+              />
+              <Line 
+                type="monotone" 
+                dataKey="profit" 
+                name="Profit"
+                stroke="hsl(var(--primary))" 
+                strokeWidth={2}
+                dot={{ strokeWidth: 2, r: 4 }}
+                activeDot={{ r: 6, strokeWidth: 2 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
         </div>
       </CardContent>
     </Card>

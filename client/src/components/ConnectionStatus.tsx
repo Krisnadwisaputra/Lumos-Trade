@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Badge } from '@/components/ui/badge';
-import { webSocketService } from '@/lib/webSocketService';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Wifi, WifiOff, AlertCircle, Loader2 } from 'lucide-react';
 
 interface ConnectionStatusProps {
   className?: string;
@@ -8,124 +9,126 @@ interface ConnectionStatusProps {
 
 type ConnectionState = 'connected' | 'connecting' | 'error' | 'simulated';
 
-const ConnectionStatus: React.FC<ConnectionStatusProps> = ({ className }) => {
+const ConnectionStatus = ({ className }: ConnectionStatusProps) => {
   const [connectionState, setConnectionState] = useState<ConnectionState>('connecting');
-  const [dataSource, setDataSource] = useState<'live' | 'simulation'>('live');
+  const [tooltipText, setTooltipText] = useState<string>('Connecting to exchange...');
 
   useEffect(() => {
-    const handleConnected = () => {
-      setConnectionState('connected');
-    };
-
-    const handleDisconnected = () => {
-      setConnectionState('connecting');
-    };
-
-    const handleError = () => {
-      setConnectionState('error');
-    };
-    
-    // Custom event for when we switch to simulation mode
-    const handleSimulation = (event: Event) => {
-      setConnectionState('connected');
-      setDataSource('simulation');
-      
-      // Log the market that's in simulation mode if available
-      const customEvent = event as CustomEvent;
-      if (customEvent.detail?.market) {
-        console.log(`Simulation active for market: ${customEvent.detail.market}`);
+    // Check if we have a WebSocket connection
+    const checkConnection = async () => {
+      try {
+        // Wait 2 seconds to simulate checking connection
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // Check for custom events that will be dispatched from websocket service
+        window.addEventListener('ws:connected', handleConnection);
+        window.addEventListener('ws:error', handleError);
+        window.addEventListener('ws:simulation', handleSimulation);
+        
+        // Start in connecting state
+        setConnectionState('connecting');
+        setTooltipText('Connecting to exchange...');
+        
+        // After 5 seconds, if still connecting, default to simulated mode
+        setTimeout(() => {
+          if (connectionState === 'connecting') {
+            setConnectionState('simulated');
+            setTooltipText('Using simulated data - No live connection established');
+          }
+        }, 5000);
+      } catch (error) {
+        console.error('Error checking connection:', error);
+        setConnectionState('error');
+        setTooltipText('Connection error. Check console for details.');
       }
     };
 
-    // Add event listeners
-    window.addEventListener('ws-connected', handleConnected);
-    window.addEventListener('ws-disconnected', handleDisconnected);
-    window.addEventListener('ws-error', handleError);
-    window.addEventListener('ws-simulation', handleSimulation);
-
-    // Try to connect initially
-    webSocketService.connect().catch(() => {
+    const handleConnection = (event: Event) => {
+      setConnectionState('connected');
+      setTooltipText('Connected to exchange API');
+    };
+    
+    const handleError = (event: Event) => {
       setConnectionState('error');
-    });
+      setTooltipText('Connection error. Check console for details.');
+    };
+    
+    const handleSimulation = (event: Event) => {
+      setConnectionState('simulated');
+      setTooltipText('Using simulated data - No live connection established');
+    };
 
-    // Cleanup
+    checkConnection();
+
     return () => {
-      window.removeEventListener('ws-connected', handleConnected);
-      window.removeEventListener('ws-disconnected', handleDisconnected);
-      window.removeEventListener('ws-error', handleError);
-      window.removeEventListener('ws-simulation', handleSimulation);
+      window.removeEventListener('ws:connected', handleConnection);
+      window.removeEventListener('ws:error', handleError);
+      window.removeEventListener('ws:simulation', handleSimulation);
     };
   }, []);
 
-  // Determine badge styles
-  const getBadgeStyle = () => {
-    // Special styling for simulation mode
-    if (connectionState === 'connected' && dataSource === 'simulation') {
-      return 'bg-purple-500';
-    }
-    
+  // Determine the icon and badge based on connection state
+  const getConnectionUI = () => {
     switch (connectionState) {
       case 'connected':
-        return 'bg-green-600';
+        return {
+          icon: <Wifi className="h-4 w-4" />,
+          badgeVariant: 'outline',
+          badgeText: 'Connected',
+          badgeClass: 'bg-green-500/20 text-green-500 border-green-500/50',
+        };
       case 'connecting':
-        return 'bg-yellow-500';
+        return {
+          icon: <Loader2 className="h-4 w-4 animate-spin" />,
+          badgeVariant: 'outline',
+          badgeText: 'Connecting',
+          badgeClass: 'bg-yellow-500/20 text-yellow-500 border-yellow-500/50',
+        };
       case 'error':
-        return 'bg-red-500';
+        return {
+          icon: <AlertCircle className="h-4 w-4" />,
+          badgeVariant: 'outline',
+          badgeText: 'Error',
+          badgeClass: 'bg-red-500/20 text-red-500 border-red-500/50',
+        };
       case 'simulated':
-        return 'bg-purple-500';
+        return {
+          icon: <WifiOff className="h-4 w-4" />,
+          badgeVariant: 'outline',
+          badgeText: 'Simulated',
+          badgeClass: 'bg-blue-500/20 text-blue-500 border-blue-500/50',
+        };
       default:
-        return 'bg-secondary';
+        return {
+          icon: <WifiOff className="h-4 w-4" />,
+          badgeVariant: 'outline',
+          badgeText: 'Disconnected',
+          badgeClass: 'bg-gray-500/20 text-gray-500 border-gray-500/50',
+        };
     }
   };
 
-  // Determine badge text
-  const getBadgeText = () => {
-    if (connectionState === 'connected' && dataSource === 'simulation') {
-      return 'Simulation Mode';
-    }
-    
-    switch (connectionState) {
-      case 'connected':
-        return 'Connected';
-      case 'connecting':
-        return 'Connecting...';
-      case 'error':
-        return 'Connection Error';
-      default:
-        return 'Unknown';
-    }
-  };
-
-  // Determine status message
-  const getStatusMessage = () => {
-    if (connectionState === 'connected' && dataSource === 'simulation') {
-      return 'Using generated data for demonstration';
-    }
-    
-    switch (connectionState) {
-      case 'connected':
-        return 'Real-time data active';
-      case 'connecting':
-        return 'Establishing connection...';
-      case 'error':
-        return 'Check your network connection';
-      default:
-        return '';
-    }
-  };
+  const { icon, badgeText, badgeClass } = getConnectionUI();
 
   return (
-    <div className={`flex items-center gap-2 ${className}`}>
-      <Badge 
-        variant={connectionState === 'error' ? "destructive" : "default"}
-        className={`text-xs font-medium ${getBadgeStyle()}`}
-      >
-        {getBadgeText()}
-      </Badge>
-      <span className="text-xs text-muted-foreground">
-        {getStatusMessage()}
-      </span>
-    </div>
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className={`flex items-center ${className}`}>
+            <Badge 
+              variant="outline" 
+              className={`flex items-center gap-1.5 px-2 py-1 ${badgeClass}`}
+            >
+              {icon}
+              <span>{badgeText}</span>
+            </Badge>
+          </div>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>{tooltipText}</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 };
 

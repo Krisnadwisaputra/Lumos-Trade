@@ -1,6 +1,6 @@
 import * as LightweightCharts from 'lightweight-charts';
 import { getTimeAsNumber, calculateEMA as calculateEMAHelper } from './chartHelpers';
-import { webSocketService } from './webSocketService';
+import webSocketService from './webSocketService';
 
 // Import series types for v5
 const { CandlestickSeries, LineSeries } = LightweightCharts;
@@ -126,14 +126,9 @@ export class TradingChart {
   // Subscribe to real-time updates via WebSocket
   private subscribeToRealTimeUpdates() {
     try {
-      // Connect to WebSocket service if not already connected
-      webSocketService.connect().then(() => {
-        // Subscribe to the current trading pair
-        webSocketService.subscribeToMarket(this.currentPair, this.handleRealTimeUpdate);
-        console.log(`Subscribed to real-time updates for ${this.currentPair}`);
-      }).catch(error => {
-        console.error('Failed to connect to WebSocket:', error);
-      });
+      // Use the webSocketService to subscribe to market updates
+      webSocketService.subscribe(this.currentPair, this.handleRealTimeUpdate);
+      console.log(`Subscribed to real-time updates for ${this.currentPair}`);
     } catch (error) {
       console.error('Error subscribing to real-time updates:', error);
     }
@@ -142,7 +137,7 @@ export class TradingChart {
   // Unsubscribe from real-time updates
   private unsubscribeFromRealTimeUpdates() {
     try {
-      webSocketService.unsubscribeFromMarket(this.currentPair, this.handleRealTimeUpdate);
+      webSocketService.unsubscribe(this.currentPair, this.handleRealTimeUpdate);
       console.log(`Unsubscribed from real-time updates for ${this.currentPair}`);
     } catch (error) {
       console.error('Error unsubscribing from real-time updates:', error);
@@ -150,7 +145,7 @@ export class TradingChart {
   }
   
   // Handle incoming real-time data
-  private handleRealTimeUpdate = (update: RealtimeUpdate) => {
+  private handleRealTimeUpdate = (update: any) => {
     try {
       if (!update || !update.time) {
         console.error('Invalid real-time update received:', update);

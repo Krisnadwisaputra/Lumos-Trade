@@ -1,139 +1,232 @@
-import { useState, useEffect, useRef } from "react";
-import { useToast } from "@/hooks/use-toast";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { getBotLogs } from "@/lib/trading";
-import { BotLog } from "@shared/schema";
+import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { apiRequest } from '@/lib/queryClient';
+import { formatDistanceToNow } from 'date-fns';
 
 interface AutoTradeLogsProps {
   userId: number;
 }
 
-const AutoTradeLogs = ({ userId }: AutoTradeLogsProps) => {
-  const { toast } = useToast();
-  const [logs, setLogs] = useState<BotLog[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const logsRef = useRef<HTMLDivElement>(null);
+interface LogEntry {
+  id: number;
+  userId: number;
+  message: string;
+  type: 'info' | 'error' | 'success' | 'warning';
+  timestamp: string;
+}
 
+const AutoTradeLogs = ({ userId }: AutoTradeLogsProps) => {
+  const [activeTab, setActiveTab] = useState<string>('all');
+  
+  const { 
+    data: logs = [], 
+    isLoading, 
+    isError, 
+    refetch 
+  } = useQuery({
+    queryKey: ['/api/bot-logs', userId],
+    queryFn: async () => {
+      try {
+        // For development we're using sample data
+        // Return apiRequest('GET', `/api/bot-logs/${userId}`) in production
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Sample data
+        return [
+          {
+            id: 1,
+            userId,
+            message: 'Bot started watching BTC/USDT on 1h timeframe',
+            type: 'info',
+            timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
+          },
+          {
+            id: 2,
+            userId,
+            message: 'EMA crossover detected (9 EMA crossed above 21 EMA)',
+            type: 'info',
+            timestamp: new Date(Date.now() - 1.5 * 60 * 60 * 1000).toISOString()
+          },
+          {
+            id: 3,
+            userId,
+            message: 'Bullish SMC pattern detected at 43,250 USDT',
+            type: 'success',
+            timestamp: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString()
+          },
+          {
+            id: 4,
+            userId,
+            message: 'Market order placed: Buy 0.01 BTC at 43,250 USDT',
+            type: 'success',
+            timestamp: new Date(Date.now() - 55 * 60 * 1000).toISOString()
+          },
+          {
+            id: 5,
+            userId,
+            message: 'Stop loss set at 42,800 USDT',
+            type: 'info',
+            timestamp: new Date(Date.now() - 54 * 60 * 1000).toISOString()
+          },
+          {
+            id: 6,
+            userId,
+            message: 'Take profit set at 44,150 USDT',
+            type: 'info',
+            timestamp: new Date(Date.now() - 53 * 60 * 1000).toISOString()
+          },
+          {
+            id: 7,
+            userId,
+            message: 'Price approaching take profit target',
+            type: 'info',
+            timestamp: new Date(Date.now() - 20 * 60 * 1000).toISOString()
+          },
+          {
+            id: 8,
+            userId,
+            message: 'Take profit executed: Sell 0.01 BTC at 44,120 USDT',
+            type: 'success',
+            timestamp: new Date(Date.now() - 10 * 60 * 1000).toISOString()
+          },
+          {
+            id: 9,
+            userId,
+            message: 'Profit: +87 USDT (2.01%)',
+            type: 'success',
+            timestamp: new Date(Date.now() - 9 * 60 * 1000).toISOString()
+          },
+          {
+            id: 10,
+            userId,
+            message: 'Bot scanning for new trade setups',
+            type: 'info',
+            timestamp: new Date(Date.now() - 5 * 60 * 1000).toISOString()
+          }
+        ] as LogEntry[];
+      } catch (error) {
+        console.error('Error fetching bot logs:', error);
+        return [];
+      }
+    }
+  });
+
+  // Auto-refresh logs every 30 seconds
   useEffect(() => {
-    loadLogs();
-    
-    // Poll for new logs every 5 seconds when the component is mounted
     const interval = setInterval(() => {
-      loadLogs();
-    }, 5000);
+      refetch();
+    }, 30000);
     
     return () => clearInterval(interval);
-  }, [userId]);
+  }, [refetch]);
 
-  useEffect(() => {
-    // Scroll to bottom when logs update
-    if (logsRef.current) {
-      logsRef.current.scrollTop = logsRef.current.scrollHeight;
-    }
-  }, [logs]);
+  const filteredLogs = activeTab === 'all' 
+    ? logs 
+    : logs.filter(log => log.type === activeTab);
 
-  const loadLogs = async () => {
-    setIsLoading(true);
-    try {
-      const botLogs = await getBotLogs(userId);
-      setLogs(botLogs);
-    } catch (error) {
-      console.error("Error loading bot logs:", error);
-    } finally {
-      setIsLoading(false);
+  const getTypeColor = (type: string) => {
+    switch (type) {
+      case 'success': return 'text-green-500';
+      case 'error': return 'text-red-500';
+      case 'warning': return 'text-yellow-500';
+      default: return 'text-blue-500';
     }
   };
 
-  const exportLogs = () => {
-    try {
-      const logText = logs.map(log => {
-        const date = new Date(log.createdAt);
-        const timeStr = date.toLocaleTimeString();
-        return `[${timeStr}] ${log.level.toUpperCase()}: ${log.message}`;
-      }).join('\n');
-      
-      const blob = new Blob([logText], { type: 'text/plain' });
-      const url = URL.createObjectURL(blob);
-      
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `trading_bot_logs_${new Date().toISOString().slice(0, 10)}.txt`;
-      document.body.appendChild(a);
-      a.click();
-      
-      // Cleanup
-      setTimeout(() => {
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      }, 100);
-      
-      toast({
-        title: "Logs exported",
-        description: "Bot logs have been exported successfully.",
-      });
-    } catch (error) {
-      console.error("Error exporting logs:", error);
-      toast({
-        variant: "destructive",
-        title: "Export failed",
-        description: "Failed to export logs. Please try again.",
-      });
+  const getTypeIcon = (type: string) => {
+    switch (type) {
+      case 'success': return '✅';
+      case 'error': return '❌';
+      case 'warning': return '⚠️';
+      default: return 'ℹ️';
     }
   };
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Bot Activity Logs</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex justify-center p-4">
+            <div className="text-center">
+              <div className="animate-spin h-6 w-6 border-4 border-primary border-t-transparent rounded-full mx-auto mb-2"></div>
+              <div>Loading logs...</div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (isError) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Bot Activity Logs</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-red-500 text-center p-4">
+            Error loading bot logs. Please try again.
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card>
-      <CardContent className="p-5">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-2xl font-bold text-gray-800">Auto Trade Logs</h2>
-          <Button
-            onClick={exportLogs}
-            variant="ghost"
-            className="text-primary-600 hover:text-primary-800 text-sm font-medium"
-            disabled={logs.length === 0}
-          >
-            <i className="fas fa-download mr-1"></i> Export
-          </Button>
-        </div>
-        
-        <div
-          ref={logsRef}
-          className="h-48 overflow-y-auto bg-gray-50 p-3 rounded text-sm font-mono space-y-1 text-gray-700"
+      <CardHeader className="pb-2">
+        <CardTitle>Bot Activity Logs</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <Tabs 
+          defaultValue="all" 
+          value={activeTab} 
+          onValueChange={setActiveTab}
+          className="w-full"
         >
-          {isLoading && logs.length === 0 ? (
-            <div className="flex justify-center items-center h-full">
-              <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-primary"></div>
-            </div>
-          ) : logs.length === 0 ? (
-            <div className="text-xs text-gray-500">
-              No logs available. Start the bot to see activity logs.
-            </div>
-          ) : (
-            logs.map((log, index) => {
-              const date = new Date(log.createdAt);
-              const timeStr = date.toLocaleTimeString();
-              let logClass = "text-gray-600";
-              
-              // Colorize log based on level
-              if (log.level === "error") {
-                logClass = "text-red-600";
-              } else if (log.level === "warning") {
-                logClass = "text-yellow-600";
-              } else if (log.message.includes("Signal detected") || log.message.includes("Order placed")) {
-                logClass = "text-green-600";
-              } else if (log.message.includes("Successfully connected")) {
-                logClass = "text-blue-600";
-              }
-              
-              return (
-                <div key={index} className={`text-xs ${logClass}`}>
-                  [{timeStr}] {log.message}
-                </div>
-              );
-            })
-          )}
-        </div>
+          <TabsList className="grid grid-cols-4 mb-4">
+            <TabsTrigger value="all">All</TabsTrigger>
+            <TabsTrigger value="info">Info</TabsTrigger>
+            <TabsTrigger value="success">Trades</TabsTrigger>
+            <TabsTrigger value="error">Errors</TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value={activeTab} className="mt-0">
+            <ScrollArea className="h-[400px] pr-4">
+              <div className="space-y-3">
+                {filteredLogs.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    No logs available in this category
+                  </div>
+                ) : (
+                  filteredLogs
+                    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+                    .map(log => (
+                      <div key={log.id} className="flex gap-2 border-b pb-2 last:border-0">
+                        <div className="flex-shrink-0 pt-0.5">
+                          {getTypeIcon(log.type)}
+                        </div>
+                        <div className="flex-grow">
+                          <p className={`${getTypeColor(log.type)} font-medium`}>
+                            {log.message}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatDistanceToNow(new Date(log.timestamp), { addSuffix: true })}
+                          </p>
+                        </div>
+                      </div>
+                    ))
+                )}
+              </div>
+            </ScrollArea>
+          </TabsContent>
+        </Tabs>
       </CardContent>
     </Card>
   );

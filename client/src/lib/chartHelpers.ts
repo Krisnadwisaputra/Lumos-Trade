@@ -1,34 +1,55 @@
-// Helper functions for chart handling
-
 /**
- * Converts any time format to a number that can be used for comparison/sorting
- * Handles string dates, numeric timestamps, and BusinessDay objects
+ * Convert any time format to a number (Unix timestamp)
  */
 export const getTimeAsNumber = (time: any): number => {
-  if (typeof time === 'string') {
-    return new Date(time).getTime();
-  }
   if (typeof time === 'number') {
     return time;
   }
-  if (time && typeof time === 'object' && 'year' in time) {
-    // Handle BusinessDay object from lightweight-charts
-    const { year, month, day } = time as { year: number, month: number, day: number };
-    return new Date(year, month - 1, day).getTime();
+
+  if (typeof time === 'string') {
+    // Try to parse as a number first (could be a string-encoded timestamp)
+    const timestamp = parseInt(time, 10);
+    if (!isNaN(timestamp)) {
+      return timestamp;
+    }
+
+    // Try to parse as a date string
+    const date = new Date(time);
+    if (!isNaN(date.getTime())) {
+      return Math.floor(date.getTime() / 1000); // Convert to Unix timestamp (seconds)
+    }
   }
-  return 0;
+
+  // Default to current time if all else fails
+  return Math.floor(Date.now() / 1000);
 };
 
 /**
  * Calculates EMA (Exponential Moving Average) for a dataset
  */
 export const calculateEMA = (data: number[], period: number): number[] => {
-  const k = 2 / (period + 1);
-  let emaArray = [data[0]];
-  
-  for (let i = 1; i < data.length; i++) {
-    emaArray.push(data[i] * k + emaArray[i - 1] * (1 - k));
+  if (data.length < period) {
+    return [];
   }
-  
-  return emaArray;
+
+  // Calculate the multiplier for EMA
+  const k = 2 / (period + 1);
+
+  // Calculate SMA for the first period data points
+  let sum = 0;
+  for (let i = 0; i < period; i++) {
+    sum += data[i];
+  }
+  let ema = sum / period;
+
+  // Calculate EMA for remaining data points
+  const emaResults: number[] = [ema];
+  for (let i = period; i < data.length; i++) {
+    ema = (data[i] - ema) * k + ema;
+    emaResults.push(ema);
+  }
+
+  // Pad the beginning with empty values to match the original data length
+  const padding = Array(period - 1).fill(0);
+  return [...padding, ...emaResults];
 };

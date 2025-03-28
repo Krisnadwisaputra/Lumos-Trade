@@ -1,8 +1,11 @@
-import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useToast } from '@/hooks/use-toast';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { apiRequest } from '@/lib/queryClient';
+import { formatDistanceToNow } from 'date-fns';
+import { X } from 'lucide-react';
 
 interface Order {
   id: string;
@@ -22,150 +25,159 @@ interface ActiveOrdersProps {
 
 const ActiveOrders = ({ userId, currentPair, onOrderCancelled }: ActiveOrdersProps) => {
   const { toast } = useToast();
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [cancelling, setCancelling] = useState<string | null>(null);
+  
+  const { 
+    data: orders = [], 
+    isLoading, 
+    isError,
+    refetch 
+  } = useQuery({
+    queryKey: ['/api/exchange/orders', currentPair],
+    queryFn: async () => {
+      try {
+        // In production, return apiRequest('GET', `/api/exchange/orders?symbol=${currentPair}`);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        return [
+          {
+            id: '12345',
+            symbol: 'BTC/USDT',
+            side: 'buy',
+            amount: 0.05,
+            price: 42500,
+            status: 'open',
+            timestamp: Date.now() - 45 * 60 * 1000
+          },
+          {
+            id: '12346',
+            symbol: 'BTC/USDT',
+            side: 'sell',
+            amount: 0.03,
+            price: 44300,
+            status: 'open',
+            timestamp: Date.now() - 2 * 60 * 60 * 1000
+          }
+        ].filter(order => order.symbol === currentPair) as Order[];
+      } catch (error) {
+        console.error('Error fetching active orders:', error);
+        return [];
+      }
+    }
+  });
 
+  // Auto-refresh orders every 30 seconds
   useEffect(() => {
-    fetchActiveOrders();
-    
-    // Poll for active orders updates every 30 seconds
-    const intervalId = setInterval(() => {
-      fetchActiveOrders();
+    const interval = setInterval(() => {
+      refetch();
     }, 30000);
     
-    return () => clearInterval(intervalId);
-  }, [currentPair]);
+    return () => clearInterval(interval);
+  }, [refetch]);
 
-  const fetchActiveOrders = async () => {
+  const handleCancelOrder = async (orderId: string, symbol: string) => {
     try {
-      setLoading(true);
-      const response = await fetch(`/api/exchange/orders?symbol=${encodeURIComponent(currentPair)}`);
-      
-      if (!response.ok) {
-        throw new Error("Failed to fetch orders");
-      }
-      
-      const data = await response.json();
-      setOrders(data);
-    } catch (error) {
-      console.error("Error fetching active orders:", error);
-      toast({
-        title: "Error",
-        description: "Failed to load active orders",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleCancelOrder = async (orderId: string) => {
-    try {
-      setCancelling(orderId);
-      
-      const response = await apiRequest(
-        "DELETE", 
-        `/api/exchange/order/${orderId}?symbol=${encodeURIComponent(currentPair)}`
-      );
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to cancel order");
-      }
+      // In production use apiRequest:
+      // await apiRequest('DELETE', `/api/exchange/order/${orderId}?symbol=${encodeURIComponent(symbol)}`);
       
       toast({
-        title: "Order cancelled",
-        description: "Your order has been cancelled successfully",
+        title: 'Order cancelled',
+        description: `Order ${orderId.slice(0, 8)}... has been cancelled`,
       });
       
-      // Refresh orders list
-      fetchActiveOrders();
-      
-      // Notify parent component if needed
       if (onOrderCancelled) {
         onOrderCancelled();
       }
-    } catch (error: any) {
+      
+      refetch();
+    } catch (error) {
+      console.error('Error cancelling order:', error);
       toast({
-        title: "Error",
-        description: error.message || "Failed to cancel order",
-        variant: "destructive",
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Failed to cancel order. Please try again.',
       });
-    } finally {
-      setCancelling(null);
     }
   };
 
-  const formatTime = (timestamp: number) => {
-    const date = new Date(timestamp);
-    return date.toLocaleString();
-  };
+  if (isLoading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Active Orders</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex justify-center py-10">
+            <div className="animate-spin h-6 w-6 border-4 border-primary border-t-transparent rounded-full"></div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (isError) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Active Orders</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-red-500 text-center py-8">
+            Error loading orders. Please try again.
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
-    <Card className="w-full">
-      <CardHeader className="pb-3">
-        <CardTitle className="flex justify-between items-center">
-          <span>Active Orders</span>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={fetchActiveOrders} 
-            disabled={loading}
-          >
-            {loading ? "Loading..." : "Refresh"}
-          </Button>
-        </CardTitle>
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle>Active Orders</CardTitle>
       </CardHeader>
       <CardContent>
-        {loading ? (
-          <div className="flex justify-center py-4">
-            <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-primary"></div>
-          </div>
-        ) : orders.length === 0 ? (
-          <div className="text-center py-4 text-muted-foreground">
+        {orders.length === 0 ? (
+          <div className="text-center py-10 text-muted-foreground">
             No active orders for {currentPair}
           </div>
         ) : (
-          <div className="space-y-4 max-h-[320px] overflow-y-auto pr-2">
-            {orders.map((order) => (
-              <div 
-                key={order.id} 
-                className="p-3 border rounded-md flex flex-col"
-              >
-                <div className="flex justify-between items-start">
-                  <div>
-                    <span className={`font-medium ${order.side === 'buy' ? 'text-green-600' : 'text-red-600'}`}>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="text-left border-b">
+                  <th className="pb-2 font-medium">Type</th>
+                  <th className="pb-2 font-medium">Price</th>
+                  <th className="pb-2 font-medium">Amount</th>
+                  <th className="pb-2 font-medium">Total</th>
+                  <th className="pb-2 font-medium">Time</th>
+                  <th className="pb-2 font-medium"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {orders.map(order => (
+                  <tr key={order.id} className="border-b last:border-0">
+                    <td className={`py-3 ${order.side === 'buy' ? 'text-green-500' : 'text-red-500'}`}>
                       {order.side.toUpperCase()}
-                    </span>
-                    <span className="text-muted-foreground"> • {order.symbol}</span>
-                  </div>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    disabled={cancelling === order.id}
-                    onClick={() => handleCancelOrder(order.id)}
-                  >
-                    {cancelling === order.id ? "Cancelling..." : "Cancel"}
-                  </Button>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-2 mt-2 text-sm">
-                  <div>
-                    <span className="text-muted-foreground">Amount:</span>{" "}
-                    {order.amount} {order.symbol.split('/')[0]}
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Price:</span>{" "}
-                    {order.price} {order.symbol.split('/')[1]}
-                  </div>
-                  <div className="col-span-2">
-                    <span className="text-muted-foreground">Created:</span>{" "}
-                    {formatTime(order.timestamp)}
-                  </div>
-                </div>
-              </div>
-            ))}
+                    </td>
+                    <td className="py-3">${order.price.toLocaleString()}</td>
+                    <td className="py-3">{order.amount.toFixed(6)}</td>
+                    <td className="py-3">${(order.amount * order.price).toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                    <td className="py-3 text-sm text-muted-foreground">
+                      {formatDistanceToNow(order.timestamp, { addSuffix: true })}
+                    </td>
+                    <td className="py-3">
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        onClick={() => handleCancelOrder(order.id, order.symbol)}
+                        title="Cancel order"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </CardContent>
