@@ -23,11 +23,7 @@ const TradingChart = ({ pair = "BTC/USDT", timeframe = "1h", userId }: TradingCh
     queryKey: ['/api/chart-data', pair, timeframe],
     queryFn: async () => {
       try {
-        // In production, this would be:
-        // return apiRequest('GET', `/api/chart-data?pair=${pair}&timeframe=${timeframe}`);
-        
-        // For now, return null to use sample data
-        return null;
+        return apiRequest('GET', `/api/chart-data?pair=${pair}&timeframe=${timeframe}`);
       } catch (error) {
         console.error('Error fetching chart data:', error);
         return null;
