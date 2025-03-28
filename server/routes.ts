@@ -1,12 +1,14 @@
 import { Express, Request, Response } from "express";
-import { createServer, type Server } from "http";
+import { type Server } from "http";
 import { storage } from "./storage";
 import { insertUserSchema, insertBotConfigSchema, insertTradeSchema, insertOrderBlockSchema, insertBotLogSchema } from "@shared/schema";
 import z from "zod";
 import { ZodError } from "zod";
 import { fromZodError } from "zod-validation-error";
+import { initializeWebSocket } from "./websocket";
 
-export async function registerRoutes(app: Express): Promise<Server> {
+export async function registerRoutes(app: Express, httpServer: Server): Promise<Server> {
+  // WebSocket is initialized in server/index.ts, we don't need to initialize it here
   // Error handler middleware
   app.use((err: any, req: Request, res: Response, next: Function) => {
     console.error(err);
@@ -268,6 +270,5 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  const httpServer = createServer(app);
   return httpServer;
 }

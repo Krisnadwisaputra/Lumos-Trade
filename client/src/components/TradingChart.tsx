@@ -3,6 +3,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { TradingChart as Chart } from "@/lib/charts";
+import { webSocketService } from "@/lib/webSocketService";
 
 interface TradingChartProps {
   pair?: string;
@@ -17,6 +18,7 @@ const TradingChart = ({ pair = "BTC/USDT", timeframe = "1h" }: TradingChartProps
   const [currentPrice, setCurrentPrice] = useState<string>("0.00");
   const [priceChange, setPriceChange] = useState<string>("0.00%");
   const [priceChangePositive, setPriceChangePositive] = useState(true);
+  const [wsConnected, setWsConnected] = useState(false);
 
   useEffect(() => {
     console.log("TradingChart mounted, initializing chart...");
@@ -63,6 +65,76 @@ const TradingChart = ({ pair = "BTC/USDT", timeframe = "1h" }: TradingChartProps
     }
   }, [currentPair, currentTimeframe]);
 
+  // Connect to real-time price updates
+  useEffect(() => {
+    // Listen for connection/disconnection events
+    const handleConnected = () => {
+      console.log("WebSocket connection established");
+      setWsConnected(true);
+    };
+    
+    const handleDisconnected = () => {
+      console.log("WebSocket connection lost");
+      setWsConnected(false);
+    };
+    
+    // Check the current connection status
+    if (typeof window !== 'undefined' && window.WebSocket) {
+      // Set initial connected state based on WebSocket readyState
+      if (webSocketService && webSocketService['socket']?.readyState === WebSocket.OPEN) {
+        setWsConnected(true);
+      } else {
+        setWsConnected(false);
+      }
+    }
+    
+    // Add event listeners (this is a simplified example - in a real app you'd
+    // want to implement event handling in the WebSocketService class)
+    window.addEventListener('ws-connected', handleConnected);
+    window.addEventListener('ws-disconnected', handleDisconnected);
+    
+    // Cleanup event listeners when component unmounts
+    return () => {
+      // Remove event listeners
+      window.removeEventListener('ws-connected', handleConnected);
+      window.removeEventListener('ws-disconnected', handleDisconnected);
+    };
+  }, []);
+  
+  // Set up a real-time price listener
+  useEffect(() => {
+    const handlePriceUpdate = (data: any) => {
+      if (data && data.close) {
+        // Update price display
+        const price = parseFloat(data.close);
+        setCurrentPrice(price.toLocaleString('en-US', {
+          style: 'currency',
+          currency: 'USD',
+          minimumFractionDigits: 2
+        }));
+        
+        // Calculate price change (this is simplified - in reality you would
+        // calculate against previous close or daily open)
+        const prevPrice = parseFloat(data.open);
+        const changePercent = ((price - prevPrice) / prevPrice) * 100;
+        
+        setPriceChange(`${changePercent > 0 ? '+' : ''}${changePercent.toFixed(2)}%`);
+        setPriceChangePositive(changePercent >= 0);
+      }
+    };
+    
+    // Subscribe to price updates for the current pair
+    webSocketService.subscribeToMarket(currentPair, handlePriceUpdate);
+    
+    // Initial price fetch
+    updatePriceDisplay();
+    
+    // Cleanup subscription when currentPair changes or component unmounts
+    return () => {
+      webSocketService.unsubscribeFromMarket(currentPair, handlePriceUpdate);
+    };
+  }, [currentPair]);
+  
   const updatePriceDisplay = async () => {
     try {
       const response = await fetch(`/api/current-price?pair=${currentPair}`);
@@ -82,18 +154,10 @@ const TradingChart = ({ pair = "BTC/USDT", timeframe = "1h" }: TradingChartProps
     } catch (error) {
       console.error("Error fetching current price:", error);
       
-      // Fallback to simulated data for demo purposes
-      const simulatedPrice = 42000 + Math.random() * 3000;
-      const simulatedChange = (Math.random() * 6) - 3;
-      
-      setCurrentPrice(simulatedPrice.toLocaleString('en-US', {
-        style: 'currency',
-        currency: 'USD',
-        minimumFractionDigits: 2
-      }));
-      
-      setPriceChange(`${simulatedChange > 0 ? '+' : ''}${simulatedChange.toFixed(2)}%`);
-      setPriceChangePositive(simulatedChange >= 0);
+      // Default values when API fails
+      setCurrentPrice("--");
+      setPriceChange("--");
+      setPriceChangePositive(true);
     }
   };
 
@@ -176,7 +240,12 @@ const TradingChart = ({ pair = "BTC/USDT", timeframe = "1h" }: TradingChartProps
           
           {/* Chart overlay with current prices */}
           <div className="absolute top-4 left-4 bg-black bg-opacity-75 rounded-lg p-3 text-white">
-            <h4 className="font-bold">{currentPair}</h4>
+            <div className="flex items-center gap-2">
+              <h4 className="font-bold">{currentPair}</h4>
+              <div className={`h-2 w-2 rounded-full ${wsConnected ? 'bg-green-500' : 'bg-red-500'}`} 
+                   title={wsConnected ? 'WebSocket Connected' : 'WebSocket Disconnected'}>
+              </div>
+            </div>
             <div className={`text-2xl font-bold ${priceChangePositive ? 'text-green-400' : 'text-red-400'}`}>
               {currentPrice}
             </div>
