@@ -19,6 +19,7 @@ export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
+  getUserByFirebaseUid(firebaseUid: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
 
   // Bot config operations
@@ -185,11 +186,30 @@ export class MemStorage implements IStorage {
       (user) => user.email && user.email.toLowerCase() === email.toLowerCase()
     );
   }
+  
+  async getUserByFirebaseUid(firebaseUid: string): Promise<User | undefined> {
+    return Array.from(this.users.values()).find(
+      (user) => user.firebaseUid === firebaseUid
+    );
+  }
 
   async createUser(insertUser: InsertUser): Promise<User> {
     const id = this.userIdCounter++;
     const createdAt = new Date();
-    const user: User = { ...insertUser, id, balance: "10000.00", createdAt };
+    
+    // Create a properly typed User object with all required fields
+    const user: User = {
+      id,
+      username: insertUser.username,
+      password: insertUser.password,
+      email: insertUser.email,
+      balance: "10000.00",
+      createdAt,
+      
+      // Optional fields with proper null handling
+      firebaseUid: insertUser.firebaseUid ?? null
+    };
+    
     this.users.set(id, user);
     return user;
   }
@@ -209,25 +229,45 @@ export class MemStorage implements IStorage {
     const existingConfig = await this.getBotConfig(config.userId);
     
     if (existingConfig) {
-      // Update existing config
+      // Update existing config with proper null handling
       const updatedConfig: BotConfig = {
-        ...existingConfig,
-        ...config,
-        updatedAt: new Date()
+        id: existingConfig.id,
+        userId: config.userId,
+        exchange: config.exchange,
+        tradingPair: config.tradingPair,
+        timeframe: config.timeframe,
+        emaPeriods: config.emaPeriods,
+        riskPercent: config.riskPercent,
+        rrRatio: config.rrRatio,
+        isActive: config.isActive ?? existingConfig.isActive,
+        createdAt: existingConfig.createdAt,
+        updatedAt: new Date(),
+        apiKey: config.apiKey ?? existingConfig.apiKey,
+        apiSecret: config.apiSecret ?? existingConfig.apiSecret
       };
+      
       this.botConfigs.set(existingConfig.id, updatedConfig);
       return updatedConfig;
     } else {
-      // Create new config
+      // Create new config with proper null handling
       const id = this.configIdCounter++;
-      const createdAt = new Date();
-      const updatedAt = new Date();
+      const now = new Date();
       const newConfig: BotConfig = {
-        ...config,
         id,
-        createdAt,
-        updatedAt
+        userId: config.userId,
+        exchange: config.exchange,
+        tradingPair: config.tradingPair,
+        timeframe: config.timeframe,
+        emaPeriods: config.emaPeriods,
+        riskPercent: config.riskPercent,
+        rrRatio: config.rrRatio,
+        isActive: config.isActive ?? false,
+        createdAt: now,
+        updatedAt: now,
+        apiKey: config.apiKey ?? null,
+        apiSecret: config.apiSecret ?? null
       };
+      
       this.botConfigs.set(id, newConfig);
       return newConfig;
     }
@@ -265,11 +305,26 @@ export class MemStorage implements IStorage {
   async addTrade(insertTrade: InsertTrade): Promise<Trade> {
     const id = this.tradeIdCounter++;
     const createdAt = new Date();
-    const trade: Trade = { 
-      ...insertTrade, 
+    
+    // Create a properly typed Trade object with all required fields
+    const trade: Trade = {
       id, 
-      createdAt, 
-      closedAt: insertTrade.status === 'CLOSED' ? new Date() : undefined
+      userId: insertTrade.userId,
+      pair: insertTrade.pair,
+      type: insertTrade.type,
+      entryPrice: insertTrade.entryPrice,
+      amount: insertTrade.amount,
+      status: insertTrade.status,
+      createdAt,
+      
+      // Optional fields with proper null handling
+      botConfigId: insertTrade.botConfigId ?? null,
+      exitPrice: insertTrade.exitPrice ?? null,
+      stopLoss: insertTrade.stopLoss ?? null,
+      takeProfit: insertTrade.takeProfit ?? null,
+      result: insertTrade.result ?? null,
+      notes: insertTrade.notes ?? null,
+      closedAt: insertTrade.status === 'CLOSED' ? new Date() : null
     };
     
     this.trades.set(id, trade);
@@ -342,7 +397,24 @@ export class MemStorage implements IStorage {
   async addOrderBlock(insertOrderBlock: InsertOrderBlock): Promise<OrderBlock> {
     const id = this.orderBlockIdCounter++;
     const createdAt = new Date();
-    const orderBlock: OrderBlock = { ...insertOrderBlock, id, createdAt };
+    
+    // Create a properly typed OrderBlock object with all required fields
+    const orderBlock: OrderBlock = {
+      id,
+      userId: insertOrderBlock.userId,
+      pair: insertOrderBlock.pair,
+      timeframe: insertOrderBlock.timeframe,
+      type: insertOrderBlock.type,
+      priceHigh: insertOrderBlock.priceHigh,
+      priceLow: insertOrderBlock.priceLow,
+      startTime: insertOrderBlock.startTime,
+      createdAt,
+      
+      // Optional fields with proper null handling
+      endTime: insertOrderBlock.endTime ?? null,
+      active: insertOrderBlock.active ?? true
+    };
+    
     this.orderBlocks.set(id, orderBlock);
     return orderBlock;
   }
@@ -357,7 +429,19 @@ export class MemStorage implements IStorage {
   async addBotLog(insertLog: InsertBotLog): Promise<BotLog> {
     const id = this.botLogIdCounter++;
     const createdAt = new Date();
-    const log: BotLog = { ...insertLog, id, createdAt };
+    
+    // Create a properly typed BotLog object with all required fields
+    const log: BotLog = {
+      id,
+      userId: insertLog.userId,
+      message: insertLog.message,
+      createdAt,
+      
+      // Optional fields with proper null handling
+      botConfigId: insertLog.botConfigId ?? null,
+      level: insertLog.level ?? "info"
+    };
+    
     this.botLogs.set(id, log);
     return log;
   }
