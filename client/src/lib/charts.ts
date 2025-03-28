@@ -1,7 +1,13 @@
-import { createChart, IChartApi, ISeriesApi, CandlestickData, LineData, Time } from 'lightweight-charts';
+import * as LightweightCharts from 'lightweight-charts';
+
+// Import series types for v5
+const { CandlestickSeries, LineSeries } = LightweightCharts;
+
+// Use LightweightCharts.Time type for proper type checking
+type ChartTime = LightweightCharts.Time;
 
 interface ChartData {
-  time: Time;
+  time: ChartTime;
   open: number;
   high: number;
   low: number;
@@ -9,12 +15,12 @@ interface ChartData {
 }
 
 interface EMASeries {
-  [period: number]: ISeriesApi<"Line">;
+  [period: number]: LightweightCharts.ISeriesApi<"Line">;
 }
 
 export class TradingChart {
-  private chart: IChartApi;
-  private candleSeries: ISeriesApi<"Candlestick">;
+  private chart: LightweightCharts.IChartApi;
+  private candleSeries: LightweightCharts.ISeriesApi<"Candlestick">;
   private emaSeries: EMASeries = {};
   private container: HTMLElement;
   private currentTimeframe: string = '1h';
@@ -24,7 +30,7 @@ export class TradingChart {
     this.container = container;
 
     // Create chart
-    this.chart = createChart(container, {
+    this.chart = LightweightCharts.createChart(container, {
       width: container.clientWidth,
       height: 400,
       layout: {
@@ -40,7 +46,7 @@ export class TradingChart {
         },
       },
       crosshair: {
-        mode: 0, // Normal mode
+        mode: LightweightCharts.CrosshairMode.Normal,
       },
       rightPriceScale: {
         borderVisible: false,
@@ -50,8 +56,8 @@ export class TradingChart {
       },
     });
 
-    // Add candlestick series
-    this.candleSeries = this.chart.addCandlestickSeries({
+    // Add candlestick series using the v5 approach
+    this.candleSeries = this.chart.addSeries(CandlestickSeries, {
       upColor: '#26a69a',
       downColor: '#ef5350',
       borderUpColor: '#26a69a',
@@ -87,11 +93,30 @@ export class TradingChart {
     }
   }
 
-  updateChart(data: ChartData[]) {
+  updateChart(rawData: any[]) {
     if (this.candleSeries) {
-      this.candleSeries.setData(data);
+      // Convert timestamps to proper format for lightweight-charts
+      const formattedData = rawData.map(item => ({
+        time: this.convertTime(item.time),
+        open: item.open,
+        high: item.high,
+        low: item.low,
+        close: item.close
+      }));
+      
+      this.candleSeries.setData(formattedData);
       this.chart.timeScale().fitContent();
     }
+  }
+  
+  // Convert time to proper format for the chart library
+  private convertTime(time: number | string): ChartTime {
+    if (typeof time === 'number') {
+      // Convert UNIX timestamp to date string in yyyy-MM-dd format
+      const date = new Date(time * 1000);
+      return date.toISOString().split('T')[0];
+    }
+    return time as ChartTime;
   }
 
   addEMA(period: number) {
@@ -108,8 +133,8 @@ export class TradingChart {
 
     const color = colors[period] || '#000000';
 
-    // Add EMA series
-    this.emaSeries[period] = this.chart.addLineSeries({
+    // Add EMA series using v5 approach
+    this.emaSeries[period] = this.chart.addSeries(LineSeries, {
       color: color,
       lineWidth: 2,
       title: `EMA ${period}`,
@@ -124,10 +149,16 @@ export class TradingChart {
       const response = await fetch(`/api/ema?pair=${this.currentPair}&timeframe=${this.currentTimeframe}&period=${period}`);
       if (!response.ok) throw new Error('Failed to fetch EMA data');
       
-      const data = await response.json();
+      const rawData = await response.json();
       
       if (this.emaSeries[period]) {
-        this.emaSeries[period].setData(data);
+        // Convert timestamps to format compatible with the chart library
+        const formattedData = rawData.map((item: any) => ({
+          time: this.convertTime(item.time),
+          value: item.value
+        }));
+        
+        this.emaSeries[period].setData(formattedData);
       }
     } catch (error) {
       console.error(`Error loading EMA ${period} data:`, error);
