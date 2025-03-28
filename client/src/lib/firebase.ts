@@ -2,6 +2,7 @@ import { initializeApp } from "firebase/app";
 import { 
   getAuth, 
   signInWithRedirect, 
+  signInWithPopup,
   GoogleAuthProvider, 
   getRedirectResult, 
   onAuthStateChanged,
@@ -24,21 +25,43 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
+
+// Configure Google provider
 const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({
+  prompt: 'select_account'
+});
 
 // Functions for authentication
-export const signInWithGoogle = () => {
-  return signInWithRedirect(auth, googleProvider);
+export const signInWithGoogle = async () => {
+  try {
+    // In development or in environments where redirects are problematic (like iframes),
+    // use popup authentication instead
+    if (import.meta.env.DEV || window.location.hostname === 'replit.app' || window.location.hostname.includes('.repl.co')) {
+      console.log('Using popup authentication for Google sign-in');
+      const result = await signInWithPopup(auth, googleProvider);
+      return result.user;
+    } else {
+      // For production, use redirect auth
+      console.log('Using redirect authentication for Google sign-in');
+      await signInWithRedirect(auth, googleProvider);
+      return null; // Redirect will happen, no return value
+    }
+  } catch (error) {
+    console.error('Google sign-in error:', error);
+    throw error;
+  }
 };
 
 // For backward compatibility with existing codebase
-export const signInWithGoogleRedirect = signInWithGoogle;
+export const signInWithGoogleRedirect = () => signInWithRedirect(auth, googleProvider);
 
 export const handleAuthRedirect = async () => {
   try {
     const result = await getRedirectResult(auth);
     if (result) {
       // User successfully authenticated
+      console.log('Successfully authenticated via redirect');
       return result.user;
     }
     return null;

@@ -70,14 +70,21 @@ const LoginModal = ({ open = true, onOpenChange, onUserAuthenticated }: LoginMod
   const handleGoogleSignIn = async () => {
     setLoading(true);
     try {
+      // Our new implementation might return a user directly (popup) or null (redirect)
       const user = await signInWithGoogle();
-      onUserAuthenticated(user);
-      toast({
-        title: "Login successful",
-        description: "Welcome back!",
-      });
+      
+      if (user) {
+        // If we got a user directly (using popup), authenticate them
+        console.log("Got user directly from popup:", user.displayName);
+        onUserAuthenticated(user);
+        toast({
+          title: "Login successful",
+          description: `Welcome ${user.displayName || user.email}!`,
+        });
+      }
+      // If we get null, that means we're using redirect and the page will reload
     } catch (error: any) {
-      console.error(error);
+      console.error("Google sign-in error:", error);
       toast({
         variant: "destructive",
         title: "Authentication error",
