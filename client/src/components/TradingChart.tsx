@@ -19,22 +19,36 @@ const TradingChart = ({ pair = "BTC/USDT", timeframe = "1h" }: TradingChartProps
   const [priceChangePositive, setPriceChangePositive] = useState(true);
 
   useEffect(() => {
+    console.log("TradingChart mounted, initializing chart...");
     let chart: Chart | null = null;
     
     if (chartContainerRef.current) {
-      chart = new Chart(chartContainerRef.current);
-      setChartInstance(chart);
-      
-      // Load initial data
-      chart.loadData(currentPair, currentTimeframe)
-        .then(() => {
-          // Simulate current price data
-          updatePriceDisplay();
-        });
+      try {
+        chart = new Chart(chartContainerRef.current);
+        console.log("Chart instance created successfully");
+        setChartInstance(chart);
+        
+        // Load initial data
+        console.log(`Loading initial chart data for ${currentPair} - ${currentTimeframe}`);
+        chart.loadData(currentPair, currentTimeframe)
+          .then(() => {
+            console.log("Initial chart data loaded successfully");
+            // Get current price data
+            updatePriceDisplay();
+          })
+          .catch(err => {
+            console.error("Error loading initial chart data:", err);
+          });
+      } catch (error) {
+        console.error("Error initializing chart:", error);
+      }
+    } else {
+      console.error("Chart container reference is null");
     }
     
     return () => {
       if (chart) {
+        console.log("Cleaning up chart instance");
         chart.destroy();
       }
     };

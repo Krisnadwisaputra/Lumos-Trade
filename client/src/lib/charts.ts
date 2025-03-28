@@ -106,73 +106,80 @@ export class TradingChart {
   updateChart(rawData: any[]) {
     if (this.candleSeries) {
       try {
-        // Convert timestamps to proper format for lightweight-charts
-        const formattedData = rawData.map(item => ({
-          time: this.convertTime(item.time),
-          open: parseFloat(item.open),
-          high: parseFloat(item.high),
-          low: parseFloat(item.low),
-          close: parseFloat(item.close)
-        }));
+        if (!Array.isArray(rawData) || rawData.length === 0) {
+          console.log('No data to display in the chart');
+          return;
+        }
         
-        // Sort data in ascending order by time - cast to the right type
-        formattedData.sort((a: ChartData, b: ChartData) => {
-          // Convert time strings to comparable values if needed
-          const timeA = getTimeAsNumber(a.time);
-          const timeB = getTimeAsNumber(b.time);
+        // Make a copy of the data and sort by time before processing
+        const sortedRawData = [...rawData].sort((a, b) => {
+          const timeA = typeof a.time === 'number' ? a.time : parseFloat(a.time);
+          const timeB = typeof b.time === 'number' ? b.time : parseFloat(b.time);
           return timeA - timeB;
         });
         
-        console.log('Setting chart data with timestamps in this order:', 
-          formattedData.map(d => typeof d.time === 'object' ? 
-            `${d.time.year}-${d.time.month}-${d.time.day}` : d.time).join(', '));
+        // Create standardized data for the chart library
+        const standardizedData = sortedRawData.map((item, index) => {
+          // Ensure consecutive times are properly ordered
+          const timestamp = typeof item.time === 'number' ? item.time : parseFloat(item.time);
+          
+          // Create proper date string in YYYY-MM-DD format using UTC to avoid timezone issues
+          const date = new Date(timestamp * 1000); // Convert Unix timestamp to milliseconds
+          const year = date.getUTCFullYear();
+          const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+          const day = String(date.getUTCDate()).padStart(2, '0');
+          
+          // Use strict ISO date format (YYYY-MM-DD) which is best supported by the chart library
+          const dateString = `${year}-${month}-${day}`;
+          
+          return {
+            // Use string date format which is most reliable with lightweight-charts
+            time: dateString,
+            open: parseFloat(item.open),
+            high: parseFloat(item.high),
+            low: parseFloat(item.low),
+            close: parseFloat(item.close)
+          };
+        });
+          
+        console.log(`Setting chart data with ${standardizedData.length} candles, first date: ${standardizedData[0]?.time}, last date: ${standardizedData[standardizedData.length-1]?.time}`);
         
-        this.candleSeries.setData(formattedData);
+        // Set the data to the chart
+        this.candleSeries.setData(standardizedData);
         this.chart.timeScale().fitContent();
       } catch (error) {
         console.error('Error updating chart:', error);
-        // Try alternate time format approach if the first one fails
-        try {
-          // Convert all times to a standard format compatible with the chart library
-          const standardizedData = rawData.map(item => {
-            // Convert timestamp to ISO string date format (YYYY-MM-DD)
-            const date = new Date(getTimeAsNumber(item.time));
-            const formattedDate = date.toISOString().split('T')[0];
-            
-            return {
-              time: formattedDate as ChartTime,
-              open: parseFloat(item.open),
-              high: parseFloat(item.high),
-              low: parseFloat(item.low),
-              close: parseFloat(item.close)
-            };
-          });
-          
-          // Sort by timestamp (for our own verification)
-          standardizedData.sort((a, b) => {
-            const timeA = getTimeAsNumber(a.time);
-            const timeB = getTimeAsNumber(b.time);
-            return timeA - timeB;
-          });
-          
-          this.candleSeries.setData(standardizedData);
-          this.chart.timeScale().fitContent();
-          console.log('Chart updated using timestamp-based fallback approach');
-        } catch (fallbackError) {
-          console.error('Failed to update chart even with fallback approach:', fallbackError);
-        }
       }
     }
   }
   
-  // Convert time to proper format for the chart library
-  private convertTime(time: number | string): ChartTime {
+  // Convert time to proper format for the chart library (YYYY-MM-DD)
+  private convertTime(time: number | string): string {
+    let timestamp: number;
+    
     if (typeof time === 'number') {
-      // Convert UNIX timestamp to date string in yyyy-MM-dd format
-      const date = new Date(time * 1000);
-      return date.toISOString().split('T')[0];
+      timestamp = time;
+    } else if (typeof time === 'string') {
+      // Try to parse the string as a number first
+      const parsed = parseFloat(time);
+      if (!isNaN(parsed)) {
+        timestamp = parsed;
+      } else {
+        // If it's a date string, parse it with Date
+        return new Date(time).toISOString().split('T')[0];
+      }
+    } else {
+      // For any other case, return a safe default
+      return new Date().toISOString().split('T')[0];
     }
-    return time as ChartTime;
+    
+    // Convert UNIX timestamp to date string in YYYY-MM-DD format
+    const date = new Date(timestamp * 1000); // Convert seconds to milliseconds
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(date.getUTCDate()).padStart(2, '0');
+    
+    return `${year}-${month}-${day}`;
   }
 
   addEMA(period: number) {
@@ -207,52 +214,43 @@ export class TradingChart {
       
       const rawData = await response.json();
       
-      if (this.emaSeries[period]) {
+      if (this.emaSeries[period] && Array.isArray(rawData) && rawData.length > 0) {
         try {
-          // Convert timestamps to format compatible with the chart library
-          const formattedData = rawData.map((item: any) => ({
-            time: this.convertTime(item.time),
-            value: parseFloat(item.value)
-          }));
-          
-          // Sort data in ascending order by time
-          formattedData.sort((a: {time: any, value: number}, b: {time: any, value: number}) => {
-            // Convert time values to comparable numbers
-            const timeA = getTimeAsNumber(a.time);
-            const timeB = getTimeAsNumber(b.time);
+          // Make a copy of the data and sort by time before processing
+          const sortedRawData = [...rawData].sort((a, b) => {
+            const timeA = typeof a.time === 'number' ? a.time : parseFloat(a.time);
+            const timeB = typeof b.time === 'number' ? b.time : parseFloat(b.time);
             return timeA - timeB;
           });
           
-          console.log(`Setting EMA ${period} data with ${formattedData.length} points`);
-          this.emaSeries[period].setData(formattedData);
-        } catch (formatError) {
-          console.error(`Error formatting EMA data:`, formatError);
+          // Standardize the EMA data format to match our candlestick format
+          const standardizedData = sortedRawData.map((item: any) => {
+            // Ensure time is a number for processing
+            const timestamp = typeof item.time === 'number' ? item.time : parseFloat(item.time);
+            
+            // Create proper date string in YYYY-MM-DD format using UTC to avoid timezone issues
+            const date = new Date(timestamp * 1000); // Convert Unix timestamp to milliseconds
+            const year = date.getUTCFullYear();
+            const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+            const day = String(date.getUTCDate()).padStart(2, '0');
+            
+            // Use strict ISO date format (YYYY-MM-DD) which is best supported
+            const dateString = `${year}-${month}-${day}`;
+            
+            return {
+              time: dateString,
+              value: parseFloat(item.value)
+            };
+          });
           
-          // Fallback approach with standardized timestamp format
-          try {
-            const standardizedData = rawData.map((item: any) => {
-              // Convert timestamp to ISO string date format (YYYY-MM-DD)
-              const date = new Date(getTimeAsNumber(item.time));
-              const formattedDate = date.toISOString().split('T')[0];
-              
-              return {
-                time: formattedDate as ChartTime,
-                value: parseFloat(item.value)
-              };
-            });
-            
-            standardizedData.sort((a: {time: ChartTime, value: number}, b: {time: ChartTime, value: number}) => {
-              const timeA = getTimeAsNumber(a.time);
-              const timeB = getTimeAsNumber(b.time);
-              return timeA - timeB;
-            });
-            
-            this.emaSeries[period].setData(standardizedData);
-            console.log(`EMA ${period} updated using timestamp-based fallback approach`);
-          } catch (fallbackError) {
-            console.error(`Failed to update EMA ${period} even with fallback approach:`, fallbackError);
-          }
+          console.log(`Setting EMA ${period} data with ${standardizedData.length} points, first date: ${standardizedData[0]?.time}, last date: ${standardizedData[standardizedData.length-1]?.time}`);
+          
+          this.emaSeries[period].setData(standardizedData);
+        } catch (error) {
+          console.error(`Error setting EMA ${period} data:`, error);
         }
+      } else {
+        console.log(`No data available for EMA ${period} or series not initialized`);
       }
     } catch (error) {
       console.error(`Error loading EMA ${period} data:`, error);
