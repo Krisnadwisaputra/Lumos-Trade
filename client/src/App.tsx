@@ -20,7 +20,7 @@ function Router() {
     // Listen for auth state changes
     let unsubscribe: () => void;
     if (auth) {
-      unsubscribe = auth.onAuthStateChanged((authUser) => {
+      unsubscribe = auth.onAuthStateChanged((authUser: any) => {
         setUser(authUser);
         setLoading(false);
       });

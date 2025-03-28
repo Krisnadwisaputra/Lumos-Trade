@@ -21,8 +21,8 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase and get auth instance
-let app;
-export let auth;
+let app: ReturnType<typeof initializeApp>;
+export let auth: ReturnType<typeof getAuth>;
 
 export const initializeFirebase = () => {
   if (!firebaseInitialized) {
