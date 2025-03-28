@@ -8,6 +8,7 @@ export const users = pgTable("users", {
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
   email: text("email").notNull().unique(),
+  firebaseUid: text("firebase_uid"),
   balance: numeric("balance").notNull().default("10000.00"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
@@ -16,6 +17,7 @@ export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
   email: true,
+  firebaseUid: true,
 });
 
 // Bot configuration model

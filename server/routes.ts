@@ -44,6 +44,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: "Failed to get user" });
     }
   });
+  
+  app.get("/api/users/by-firebase/:firebaseUid", async (req: Request, res: Response) => {
+    try {
+      const firebaseUid = req.params.firebaseUid;
+      const user = await storage.getUserByFirebaseUid(firebaseUid);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      res.json(user);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get user" });
+    }
+  });
 
   // Bot configuration routes
   app.get("/api/bot-config/:userId", async (req: Request, res: Response) => {

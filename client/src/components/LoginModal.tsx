@@ -61,7 +61,8 @@ const LoginModal = () => {
       await apiRequest("POST", "/api/users", {
         username: email.split('@')[0],  // Use part of email as username
         email: email,
-        password: "firebase-auth" // Placeholder as we use Firebase for auth
+        password: "firebase-auth", // Placeholder as we use Firebase for auth
+        firebaseUid: user.uid // Store Firebase UID
       });
       
       toast({
@@ -101,7 +102,8 @@ const LoginModal = () => {
         await apiRequest("POST", "/api/users", {
           username: user.displayName || user.email?.split('@')[0] || "user",
           email: user.email || "",
-          password: "firebase-auth" // Placeholder as we use Firebase for auth
+          password: "firebase-auth", // Placeholder as we use Firebase for auth
+          firebaseUid: user.uid // Store Firebase UID
         });
       }
       

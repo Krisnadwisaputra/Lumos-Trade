@@ -38,7 +38,7 @@ function Router() {
         if (authUser) {
           // When user is authenticated, automatically create or get user from API
           // This will sync Firebase auth user with backend user data
-          fetch(`/api/users/by-email/${encodeURIComponent(authUser.email)}`)
+          fetch(`/api/users/by-firebase/${authUser.uid}`)
             .then(response => {
               if (response.status === 404) {
                 // User doesn't exist in backend, create user
@@ -48,7 +48,8 @@ function Router() {
                   body: JSON.stringify({
                     email: authUser.email,
                     username: authUser.displayName || authUser.email.split('@')[0],
-                    firebaseUid: authUser.uid
+                    firebaseUid: authUser.uid,
+                    password: "firebase-auth" // Required field in our schema
                   })
                 });
               }
