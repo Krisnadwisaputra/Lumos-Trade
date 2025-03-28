@@ -448,10 +448,25 @@ export class MemStorage implements IStorage {
 
   async getChartData(pair: string, timeframe: string): Promise<any[]> {
     const key = `${pair}_${timeframe}`;
-    return this.chartData.get(key) || [];
+    const data = this.chartData.get(key) || [];
+    
+    if (data.length > 0) {
+      // Sort data by timestamp to ensure it's in the correct order
+      const sortedData = [...data].sort((a, b) => {
+        // Make sure timestamps are compared as numbers
+        const timeA = typeof a.time === 'number' ? a.time : parseFloat(a.time);
+        const timeB = typeof b.time === 'number' ? b.time : parseFloat(b.time);
+        return timeA - timeB;
+      });
+      
+      return sortedData;
+    }
+    
+    return data;
   }
 
   async getEMA(pair: string, timeframe: string, period: number): Promise<any[]> {
+    // Get pre-sorted candlestick data from getChartData
     const candlesticks = await this.getChartData(pair, timeframe);
     
     if (candlesticks.length === 0) {
@@ -459,16 +474,19 @@ export class MemStorage implements IStorage {
     }
     
     // Extract close prices
-    const prices = candlesticks.map(candle => candle.close);
+    const prices = candlesticks.map(candle => parseFloat(candle.close));
     
     // Calculate EMA
     const emaValues = calculateEMA(prices, period);
     
     // Format data for chart
-    return candlesticks.map((candle, index) => ({
+    const emaData = candlesticks.map((candle, index) => ({
       time: candle.time,
       value: emaValues[index]
     }));
+    
+    // Return in the same chronological order as the candlesticks
+    return emaData;
   }
 
   async getCurrentPrice(pair: string): Promise<{ price: string, change: string }> {
