@@ -4,18 +4,26 @@ import { log } from './vite';
 // Initialize the Binance exchange with API credentials
 const initializeBinance = () => {
   try {
+    console.log('Creating Binance exchange instance...');
+    const apiKey = process.env.BINANCE_API_KEY;
+    const apiSecret = process.env.BINANCE_API_SECRET;
+    
+    console.log(`API Key present: ${!!apiKey}, API Secret present: ${!!apiSecret}`);
+    
     const binance = new ccxt.binance({
-      apiKey: process.env.BINANCE_API_KEY,
-      secret: process.env.BINANCE_API_SECRET,
+      apiKey: apiKey,
+      secret: apiSecret,
       enableRateLimit: true,
       options: {
         defaultType: 'spot',
       }
     });
 
+    console.log('Binance exchange instance created successfully');
     log('Binance exchange initialized successfully', 'exchange');
     return binance;
   } catch (error) {
+    console.error(`Error initializing Binance: ${error}`);
     log(`Error initializing Binance: ${error}`, 'exchange');
     throw new Error(`Failed to initialize Binance exchange: ${error}`);
   }
@@ -245,15 +253,20 @@ export const formatPair = (pair: string): string => {
 
 // Initialize the exchange when the server starts
 export const initializeExchange = (): void => {
+  console.log('Attempting to initialize exchange connection...');
   try {
     if (!process.env.BINANCE_API_KEY || !process.env.BINANCE_API_SECRET) {
+      console.log('Warning: Binance API credentials not found in environment variables.');
       log('Binance API credentials not found. Live trading will not be available.', 'exchange');
       return;
     }
     
+    console.log('Binance API credentials found, initializing exchange...');
     getExchange();
+    console.log('Exchange integration initialized successfully');
     log('Exchange integration ready for live trading', 'exchange');
   } catch (error) {
+    console.error(`Failed to initialize exchange: ${error}`);
     log(`Failed to initialize exchange: ${error}`, 'exchange');
   }
 };
