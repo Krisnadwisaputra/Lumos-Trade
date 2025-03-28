@@ -158,7 +158,24 @@ export class TradingChart {
       }
       
       // Format the timestamp to match our date format
-      const timestamp = update.time;
+      let timestamp = update.time;
+      // Make sure timestamp is a number
+      if (typeof timestamp === 'string') {
+        timestamp = parseInt(timestamp, 10);
+      }
+      
+      // Ensure we have a valid timestamp
+      if (isNaN(timestamp)) {
+        console.error('Invalid timestamp in real-time update:', update);
+        return;
+      }
+      
+      // Check if timestamp is in milliseconds (13 digits) or seconds (10 digits)
+      // If it's in milliseconds, convert to seconds
+      if (timestamp > 10000000000) {
+        timestamp = Math.floor(timestamp / 1000);
+      }
+      
       const date = new Date(timestamp * 1000);
       const year = date.getUTCFullYear();
       const month = String(date.getUTCMonth() + 1).padStart(2, '0');
@@ -174,6 +191,13 @@ export class TradingChart {
         formattedTime = `${year}-${month}-${day}`;
       }
       
+      // Validate price data
+      if (typeof update.open !== 'number' || typeof update.high !== 'number' || 
+          typeof update.low !== 'number' || typeof update.close !== 'number') {
+        console.error('Invalid price data in real-time update:', update);
+        return;
+      }
+      
       // Update the candlestick
       const candleData = {
         time: formattedTime,
@@ -185,8 +209,13 @@ export class TradingChart {
       
       console.log(`Real-time update for ${this.currentPair}: ${JSON.stringify(candleData)}`);
       
-      // Update the chart with the latest candle
-      this.candleSeries.update(candleData);
+      // Make sure candleSeries exists before updating
+      if (this.candleSeries) {
+        // Update the chart with the latest candle
+        this.candleSeries.update(candleData);
+      } else {
+        console.error('Cannot update chart: candleSeries is not initialized');
+      }
       
       // Recalculate EMA values if any are active
       // Note: In a production app, you'd want to calculate this on the server side
