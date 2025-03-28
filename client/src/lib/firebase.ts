@@ -5,7 +5,11 @@ import {
   signInWithEmailAndPassword, 
   signOut,
   onAuthStateChanged,
-  User
+  User,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult
 } from "firebase/auth";
 
 let firebaseInitialized = false;
@@ -49,4 +53,28 @@ export const logoutUser = async (): Promise<void> => {
 
 export const getCurrentUser = (): User | null => {
   return auth.currentUser;
+};
+
+export const signInWithGoogle = async (): Promise<User> => {
+  const provider = new GoogleAuthProvider();
+  const result = await signInWithPopup(auth, provider);
+  return result.user;
+};
+
+export const signInWithGoogleRedirect = async (): Promise<void> => {
+  const provider = new GoogleAuthProvider();
+  await signInWithRedirect(auth, provider);
+};
+
+export const handleGoogleRedirect = async (): Promise<User | null> => {
+  try {
+    const result = await getRedirectResult(auth);
+    if (result) {
+      return result.user;
+    }
+    return null;
+  } catch (error) {
+    console.error("Error handling Google redirect", error);
+    return null;
+  }
 };

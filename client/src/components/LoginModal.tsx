@@ -1,11 +1,13 @@
 import { useState } from "react";
-import { registerUser, loginUser } from "@/lib/firebase";
+import { registerUser, loginUser, signInWithGoogle } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { apiRequest } from "@/lib/queryClient";
+import { Separator } from "@/components/ui/separator";
+import { FcGoogle } from "react-icons/fc";
 
 const LoginModal = () => {
   const [email, setEmail] = useState("");
@@ -79,6 +81,47 @@ const LoginModal = () => {
       setIsLoading(false);
     }
   };
+  
+  const handleGoogleSignIn = async () => {
+    setIsLoading(true);
+    setErrorMessage("");
+    
+    try {
+      const user = await signInWithGoogle();
+      
+      // Check if user already exists in our backend
+      const response = await fetch(`/api/users/by-email/${user.email}`);
+      
+      if (!response.ok && response.status !== 404) {
+        throw new Error("Failed to check user");
+      }
+      
+      // If user doesn't exist, create them
+      if (response.status === 404) {
+        await apiRequest("POST", "/api/users", {
+          username: user.displayName || user.email?.split('@')[0] || "user",
+          email: user.email || "",
+          password: "firebase-auth" // Placeholder as we use Firebase for auth
+        });
+      }
+      
+      toast({
+        title: "Login successful",
+        description: "You are now logged in with Google.",
+      });
+      
+      // Successful login is handled by the onAuthStateChanged listener in App.tsx
+    } catch (error: any) {
+      setErrorMessage(error.message || "Failed to login with Google. Please try again.");
+      toast({
+        variant: "destructive",
+        title: "Google login failed",
+        description: error.message || "Please try again.",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -131,6 +174,25 @@ const LoginModal = () => {
               variant="outline"
             >
               Create Account
+            </Button>
+            
+            <div className="relative my-4">
+              <Separator className="absolute inset-0 flex items-center" />
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-background px-2 text-muted-foreground">
+                  Or continue with
+                </span>
+              </div>
+            </div>
+            
+            <Button 
+              className="w-full"
+              onClick={handleGoogleSignIn}
+              disabled={isLoading}
+              variant="outline"
+            >
+              <FcGoogle className="mr-2 h-5 w-5" />
+              Google
             </Button>
           </div>
         </CardContent>
