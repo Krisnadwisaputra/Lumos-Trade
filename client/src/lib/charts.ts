@@ -178,13 +178,9 @@ export class TradingChart {
       const hour = String(date.getUTCHours()).padStart(2, '0');
       const minute = String(date.getUTCMinutes()).padStart(2, '0');
       
-      // For minute timeframes, use a more detailed time format
-      let formattedTime: string;
-      if (this.currentTimeframe.includes('m')) {
-        formattedTime = `${year}-${month}-${day} ${hour}:${minute}`;
-      } else {
-        formattedTime = `${year}-${month}-${day}`;
-      }
+      // Use simple date format to avoid parsing errors
+      // Always use YYYY-MM-DD format for consistency
+      const formattedTime = `${year}-${month}-${day}`;
       
       // Validate price data
       if (typeof update.open !== 'number' || typeof update.high !== 'number' || 
@@ -258,14 +254,14 @@ export class TradingChart {
           
           // Create a unique time string that includes details to prevent duplicates
           // For daily data, use YYYY-MM-DD
-          // For more granular timeframes, include hours/minutes/seconds/index
+          // For more granular timeframes, we still use YYYY-MM-DD format but with an index to ensure uniqueness
           let dateString;
           if (this.currentTimeframe.includes('d')) {
             dateString = `${year}-${month}-${day}`;
           } else {
-            // Add a tiny increment based on index to ensure uniqueness
-            // This is necessary because LightweightCharts requires strictly increasing times
-            dateString = `${year}-${month}-${day} ${hour}:${minute}:${second}.${index}`;
+            // Using simple date format to avoid Invalid date string errors
+            // Adding index for uniqueness but avoid spaces in time strings
+            dateString = `${year}-${month}-${day}.${index}`;
           }
           
           return {
@@ -294,8 +290,9 @@ export class TradingChart {
             const second = String(incrementedTime.getUTCSeconds()).padStart(2, '0');
             const millisecond = String(incrementedTime.getUTCMilliseconds()).padStart(3, '0');
             
-            // Create a unique key with the incremented time
-            const newKey = `${year}-${month}-${day} ${hour}:${minute}:${second}.${millisecond}`;
+            // Create a unique key with the incremented time using only date format
+            // Avoid using spaces in time strings which can cause problems
+            const newKey = `${year}-${month}-${day}.${index}`;
             item.time = newKey;
           }
           uniqueDataMap.set(item.time, item);
@@ -330,11 +327,17 @@ export class TradingChart {
           });
           console.warn("Duplicate times:", duplicates);
           
-          // Last resort: generate completely artificial but unique timestamps
-          const finalData = standardizedData.map((item, index) => ({
-            ...item,
-            time: index // Use index as time - this is a fallback solution
-          }));
+          // Last resort: create date string based on index
+          const finalData = standardizedData.map((item, index) => {
+            const today = new Date();
+            const year = today.getUTCFullYear();
+            const month = String(today.getUTCMonth() + 1).padStart(2, '0');
+            const day = String(today.getUTCDate() - 30 + index).padStart(2, '0');
+            return {
+              ...item,
+              time: `${year}-${month}-${day}`
+            };
+          });
           this.candleSeries.setData(finalData);
         } else {
           // Set the data to the chart
@@ -433,10 +436,9 @@ export class TradingChart {
             const year = date.getUTCFullYear();
             const month = String(date.getUTCMonth() + 1).padStart(2, '0');
             const day = String(date.getUTCDate()).padStart(2, '0');
-            const hour = String(date.getUTCHours()).padStart(2, '0');
-            const minute = String(date.getUTCMinutes()).padStart(2, '0');
             
-            // Use either simple date format or more detailed format with index to ensure uniqueness
+            // Just use a simple date format that lightweight-charts can reliably parse
+            // Avoid using time with spaces or other formats that can cause issues
             const dateString = `${year}-${month}-${day}`;
             
             return {
@@ -478,11 +480,17 @@ export class TradingChart {
           
           if (hasDuplicates) {
             console.warn(`Warning: Duplicate times still detected in EMA ${period} data after processing`);
-            // Last resort: create numeric index-based times
-            const finalData = standardizedData.map((item, index) => ({
-              time: index,
-              value: item.value
-            }));
+            // Last resort: create date string based on index
+            const finalData = standardizedData.map((item, index) => {
+              const today = new Date();
+              const year = today.getUTCFullYear();
+              const month = String(today.getUTCMonth() + 1).padStart(2, '0');
+              const day = String(today.getUTCDate() - 30 + index).padStart(2, '0');
+              return {
+                time: `${year}-${month}-${day}`,
+                value: item.value
+              };
+            });
             this.emaSeries[period].setData(finalData);
           } else {
             // Set the data to the chart
