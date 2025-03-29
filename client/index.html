@@ -1,14 +1,509 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>EMA + SMC Auto Trading Journal</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lumos Trading Platform</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #0f172a;
+            color: #e2e8f0;
+        }
+        .card {
+            background-color: #1e293b;
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        .btn-primary {
+            background-color: #3b82f6;
+            color: white;
+            border-radius: 0.375rem;
+            padding: 0.5rem 1rem;
+            font-weight: 500;
+            transition: all 150ms ease-in-out;
+        }
+        .btn-primary:hover {
+            background-color: #2563eb;
+        }
+        .text-positive {
+            color: #10b981;
+        }
+        .text-negative {
+            color: #ef4444;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mx-auto px-4 py-8">
+        <header class="flex justify-between items-center mb-8">
+            <h1 class="text-3xl font-bold text-white">Lumos Trade</h1>
+            <div class="flex items-center">
+                <div id="connection-status" class="hidden mr-4">
+                    <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-900 text-green-300">
+                        <span id="status-indicator" class="h-2 w-2 mr-2 rounded-full bg-green-300"></span>
+                        <span id="status-text">Connected</span>
+                    </span>
+                </div>
+                <div id="balance-container" class="hidden mr-4">
+                    <span class="text-gray-400">Balance: </span>
+                    <span id="balance-value" class="font-semibold">--</span>
+                </div>
+                <button id="login-btn" class="btn-primary">Login</button>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+            <div class="card p-4 col-span-2">
+                <h2 class="text-xl font-semibold mb-4">Market Price</h2>
+                <div class="flex flex-wrap gap-4">
+                    <div class="price-card p-4 bg-gray-800 rounded-lg flex-1">
+                        <div class="text-gray-400 text-sm">BTC/USDT</div>
+                        <div class="flex items-baseline mt-1">
+                            <span id="btc-price" class="text-2xl font-bold">--</span>
+                            <span id="btc-change" class="ml-2 text-sm">--</span>
+                        </div>
+                    </div>
+                    <div class="price-card p-4 bg-gray-800 rounded-lg flex-1">
+                        <div class="text-gray-400 text-sm">ETH/USDT</div>
+                        <div class="flex items-baseline mt-1">
+                            <span id="eth-price" class="text-2xl font-bold">--</span>
+                            <span id="eth-change" class="ml-2 text-sm">--</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="card p-4">
+                <h2 class="text-xl font-semibold mb-4">Trading Mode</h2>
+                <div id="trading-mode" class="text-center p-3 mb-3 bg-yellow-900 text-yellow-300 rounded-md">
+                    Simulation Mode
+                </div>
+                <p class="text-gray-400 text-sm">
+                    Currently running in simulation mode. Connect your Binance API to switch to live trading.
+                </p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-12 gap-6">
+            <div class="card p-4 md:col-span-8">
+                <h2 class="text-xl font-semibold mb-4">Active Orders</h2>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-700">
+                        <thead class="bg-gray-800">
+                            <tr>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Symbol</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Side</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Type</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Price</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Amount</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Status</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="orders-table-body" class="divide-y divide-gray-700">
+                            <tr>
+                                <td colspan="7" class="px-6 py-4 text-center text-sm text-gray-400">No active orders</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="card p-4 md:col-span-4">
+                <h2 class="text-xl font-semibold mb-4">Quick Trade</h2>
+                <form id="trade-form" class="space-y-4">
+                    <div>
+                        <label for="symbol" class="block text-sm font-medium text-gray-400">Symbol</label>
+                        <select id="symbol" name="symbol" class="mt-1 block w-full py-2 px-3 border border-gray-700 bg-gray-800 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                            <option value="BTC/USDT">BTC/USDT</option>
+                            <option value="ETH/USDT">ETH/USDT</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="side" class="block text-sm font-medium text-gray-400">Side</label>
+                        <div class="mt-1 flex rounded-md shadow-sm">
+                            <button type="button" id="buy-btn" class="w-1/2 py-2 px-4 text-sm font-medium rounded-l-md bg-green-900 text-green-300 hover:bg-green-800 focus:z-10 focus:ring-2 focus:ring-green-500">
+                                Buy
+                            </button>
+                            <button type="button" id="sell-btn" class="w-1/2 py-2 px-4 text-sm font-medium rounded-r-md bg-gray-800 text-gray-300 hover:bg-gray-700 focus:z-10 focus:ring-2 focus:ring-red-500">
+                                Sell
+                            </button>
+                        </div>
+                    </div>
+                    <div>
+                        <label for="type" class="block text-sm font-medium text-gray-400">Order Type</label>
+                        <select id="type" name="type" class="mt-1 block w-full py-2 px-3 border border-gray-700 bg-gray-800 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                            <option value="LIMIT">Limit</option>
+                            <option value="MARKET">Market</option>
+                        </select>
+                    </div>
+                    <div id="price-field">
+                        <label for="price" class="block text-sm font-medium text-gray-400">Price</label>
+                        <div class="mt-1 relative rounded-md shadow-sm">
+                            <input type="number" step="0.01" name="price" id="price" class="block w-full py-2 px-3 border border-gray-700 bg-gray-800 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" placeholder="0.00">
+                        </div>
+                    </div>
+                    <div>
+                        <label for="quantity" class="block text-sm font-medium text-gray-400">Quantity</label>
+                        <div class="mt-1 relative rounded-md shadow-sm">
+                            <input type="number" step="0.001" name="quantity" id="quantity" class="block w-full py-2 px-3 border border-gray-700 bg-gray-800 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" placeholder="0.00">
+                        </div>
+                    </div>
+                    <button type="submit" class="w-full btn-primary">
+                        Place Order
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <div class="card p-4 mt-6">
+            <h2 class="text-xl font-semibold mb-4">Trade History</h2>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-700">
+                    <thead class="bg-gray-800">
+                        <tr>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Symbol</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Side</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Price</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Amount</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Cost</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Fee</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Date</th>
+                        </tr>
+                    </thead>
+                    <tbody id="trades-table-body" class="divide-y divide-gray-700">
+                        <tr>
+                            <td colspan="7" class="px-6 py-4 text-center text-sm text-gray-400">No trade history</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let currentSide = 'buy';
+        
+        // DOM elements
+        const loginBtn = document.getElementById('login-btn');
+        const connectionStatus = document.getElementById('connection-status');
+        const statusIndicator = document.getElementById('status-indicator');
+        const statusText = document.getElementById('status-text');
+        const balanceContainer = document.getElementById('balance-container');
+        const balanceValue = document.getElementById('balance-value');
+        const tradingMode = document.getElementById('trading-mode');
+        const ordersTableBody = document.getElementById('orders-table-body');
+        const tradesTableBody = document.getElementById('trades-table-body');
+        const tradeForm = document.getElementById('trade-form');
+        const buyBtn = document.getElementById('buy-btn');
+        const sellBtn = document.getElementById('sell-btn');
+        const typeSelect = document.getElementById('type');
+        const priceField = document.getElementById('price-field');
+        const btcPrice = document.getElementById('btc-price');
+        const btcChange = document.getElementById('btc-change');
+        const ethPrice = document.getElementById('eth-price');
+        const ethChange = document.getElementById('eth-change');
+
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', async () => {
+            await checkServerStatus();
+            await fetchPrices();
+            await fetchOrders();
+            await fetchTrades();
+            
+            // Set up price update interval
+            setInterval(fetchPrices, 5000);
+        });
+
+        // Check server status and connection mode
+        async function checkServerStatus() {
+            try {
+                const response = await fetch('/api/health');
+                const data = await response.json();
+                
+                connectionStatus.classList.remove('hidden');
+                
+                if (data.status === 'simulation') {
+                    statusIndicator.classList.remove('bg-green-300');
+                    statusIndicator.classList.add('bg-yellow-300');
+                    statusText.textContent = 'Simulation';
+                    tradingMode.textContent = 'Simulation Mode';
+                    tradingMode.classList.remove('bg-green-900', 'text-green-300');
+                    tradingMode.classList.add('bg-yellow-900', 'text-yellow-300');
+                } else {
+                    statusIndicator.classList.remove('bg-yellow-300');
+                    statusIndicator.classList.add('bg-green-300');
+                    statusText.textContent = 'Connected';
+                    tradingMode.textContent = 'Live Trading';
+                    tradingMode.classList.remove('bg-yellow-900', 'text-yellow-300');
+                    tradingMode.classList.add('bg-green-900', 'text-green-300');
+                }
+                
+                await fetchBalance();
+            } catch (error) {
+                console.error('Server connection error:', error);
+                connectionStatus.classList.remove('hidden');
+                statusIndicator.classList.remove('bg-green-300', 'bg-yellow-300');
+                statusIndicator.classList.add('bg-red-300');
+                statusText.textContent = 'Disconnected';
+            }
+        }
+
+        // Fetch current prices
+        async function fetchPrices() {
+            try {
+                // Fetch BTC/USDT price
+                const btcResponse = await fetch('/api/current-price?symbol=BTC/USDT');
+                const btcData = await btcResponse.json();
+                btcPrice.textContent = parseFloat(btcData.price).toLocaleString('en-US', {
+                    style: 'currency',
+                    currency: 'USD',
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                });
+                
+                const btcChangeValue = parseFloat(btcData.change);
+                btcChange.textContent = btcChangeValue.toFixed(2) + '%';
+                btcChange.classList.remove('text-positive', 'text-negative');
+                btcChange.classList.add(btcChangeValue >= 0 ? 'text-positive' : 'text-negative');
+                
+                // Fetch ETH/USDT price
+                const ethResponse = await fetch('/api/current-price?symbol=ETH/USDT');
+                const ethData = await ethResponse.json();
+                ethPrice.textContent = parseFloat(ethData.price).toLocaleString('en-US', {
+                    style: 'currency',
+                    currency: 'USD',
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                });
+                
+                const ethChangeValue = parseFloat(ethData.change);
+                ethChange.textContent = ethChangeValue.toFixed(2) + '%';
+                ethChange.classList.remove('text-positive', 'text-negative');
+                ethChange.classList.add(ethChangeValue >= 0 ? 'text-positive' : 'text-negative');
+                
+                // Update price field with current market price for selected symbol
+                const symbolSelect = document.getElementById('symbol');
+                const currentSymbol = symbolSelect.value;
+                const priceInput = document.getElementById('price');
+                
+                if (currentSymbol === 'BTC/USDT') {
+                    priceInput.value = parseFloat(btcData.price).toFixed(2);
+                } else if (currentSymbol === 'ETH/USDT') {
+                    priceInput.value = parseFloat(ethData.price).toFixed(2);
+                }
+                
+            } catch (error) {
+                console.error('Error fetching prices:', error);
+            }
+        }
+
+        // Fetch balance
+        async function fetchBalance() {
+            try {
+                const response = await fetch('/api/exchange/balance');
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    balanceContainer.classList.remove('hidden');
+                    
+                    // Show USDT balance
+                    const usdtBalance = data.balance.USDT;
+                    if (usdtBalance) {
+                        balanceValue.textContent = usdtBalance.free.toLocaleString('en-US', {
+                            style: 'currency',
+                            currency: 'USD',
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2
+                        });
+                    }
+                }
+            } catch (error) {
+                console.error('Error fetching balance:', error);
+            }
+        }
+
+        // Fetch orders
+        async function fetchOrders() {
+            try {
+                const response = await fetch('/api/exchange/orders');
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    if (data.orders.length === 0) {
+                        ordersTableBody.innerHTML = `
+                            <tr>
+                                <td colspan="7" class="px-6 py-4 text-center text-sm text-gray-400">No active orders</td>
+                            </tr>
+                        `;
+                    } else {
+                        let html = '';
+                        data.orders.forEach(order => {
+                            html += `
+                                <tr>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm">${order.symbol}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm ${order.side === 'buy' ? 'text-green-400' : 'text-red-400'}">${order.side.toUpperCase()}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm">${order.type.toUpperCase()}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm">${order.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm">${order.amount.toFixed(6)}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm">${order.status.toUpperCase()}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm">
+                                        <button class="cancel-order-btn px-3 py-1 bg-red-900 text-red-300 rounded hover:bg-red-800" data-id="${order.id}" data-symbol="${order.symbol}">Cancel</button>
+                                    </td>
+                                </tr>
+                            `;
+                        });
+                        ordersTableBody.innerHTML = html;
+                        
+                        // Add event listeners for cancel buttons
+                        document.querySelectorAll('.cancel-order-btn').forEach(btn => {
+                            btn.addEventListener('click', cancelOrder);
+                        });
+                    }
+                }
+            } catch (error) {
+                console.error('Error fetching orders:', error);
+            }
+        }
+
+        // Fetch trades
+        async function fetchTrades() {
+            try {
+                const response = await fetch('/api/exchange/trades?symbol=BTC/USDT');
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    if (data.trades.length === 0) {
+                        tradesTableBody.innerHTML = `
+                            <tr>
+                                <td colspan="7" class="px-6 py-4 text-center text-sm text-gray-400">No trade history</td>
+                            </tr>
+                        `;
+                    } else {
+                        let html = '';
+                        data.trades.forEach(trade => {
+                            const date = new Date(trade.timestamp);
+                            html += `
+                                <tr>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm">${trade.symbol}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm ${trade.side === 'buy' ? 'text-green-400' : 'text-red-400'}">${trade.side.toUpperCase()}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm">${trade.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm">${trade.amount.toFixed(6)}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm">${trade.cost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm">${trade.fee.cost} ${trade.fee.currency}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm">${date.toLocaleString()}</td>
+                                </tr>
+                            `;
+                        });
+                        tradesTableBody.innerHTML = html;
+                    }
+                }
+            } catch (error) {
+                console.error('Error fetching trades:', error);
+            }
+        }
+
+        // Cancel order
+        async function cancelOrder(event) {
+            const orderId = event.target.getAttribute('data-id');
+            const symbol = event.target.getAttribute('data-symbol');
+            
+            try {
+                const response = await fetch(`/api/exchange/cancel-order?orderId=${orderId}&symbol=${symbol}`, {
+                    method: 'DELETE'
+                });
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    alert('Order cancelled successfully');
+                    fetchOrders(); // Refresh orders
+                } else {
+                    alert(`Error: ${data.message}`);
+                }
+            } catch (error) {
+                console.error('Error cancelling order:', error);
+                alert('Failed to cancel order');
+            }
+        }
+
+        // Event listeners
+        loginBtn.addEventListener('click', () => {
+            // Mock login functionality
+            alert('Login functionality to be implemented with Firebase');
+        });
+
+        buyBtn.addEventListener('click', () => {
+            currentSide = 'buy';
+            buyBtn.classList.remove('bg-gray-800', 'text-gray-300');
+            buyBtn.classList.add('bg-green-900', 'text-green-300');
+            sellBtn.classList.remove('bg-red-900', 'text-red-300');
+            sellBtn.classList.add('bg-gray-800', 'text-gray-300');
+        });
+
+        sellBtn.addEventListener('click', () => {
+            currentSide = 'sell';
+            sellBtn.classList.remove('bg-gray-800', 'text-gray-300');
+            sellBtn.classList.add('bg-red-900', 'text-red-300');
+            buyBtn.classList.remove('bg-green-900', 'text-green-300');
+            buyBtn.classList.add('bg-gray-800', 'text-gray-300');
+        });
+
+        typeSelect.addEventListener('change', () => {
+            const orderType = typeSelect.value;
+            if (orderType === 'MARKET') {
+                priceField.style.display = 'none';
+            } else {
+                priceField.style.display = 'block';
+            }
+        });
+
+        document.getElementById('symbol').addEventListener('change', () => {
+            fetchPrices(); // Update price field when symbol changes
+        });
+
+        tradeForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const symbol = document.getElementById('symbol').value;
+            const type = document.getElementById('type').value;
+            const quantity = parseFloat(document.getElementById('quantity').value);
+            const price = type === 'LIMIT' ? parseFloat(document.getElementById('price').value) : null;
+            
+            if (!quantity || (type === 'LIMIT' && !price)) {
+                alert('Please fill all required fields');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/exchange/create-order', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        symbol,
+                        side: currentSide,
+                        type,
+                        quantity,
+                        price
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    alert('Order placed successfully');
+                    tradeForm.reset();
+                    fetchOrders(); // Refresh orders
+                    fetchBalance(); // Refresh balance
+                } else {
+                    alert(`Error: ${data.message}`);
+                }
+            } catch (error) {
+                console.error('Error placing order:', error);
+                alert('Failed to place order');
+            }
+        });
+    </script>
+</body>
 </html>
