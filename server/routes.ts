@@ -443,26 +443,45 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   
   app.post("/api/exchange/execute-signal", async (req: Request, res: Response) => {
     try {
-      const { symbol, side, amount, orderType, price, userId, botConfigId } = req.body;
+      const { 
+        symbol, 
+        side, 
+        amount, 
+        orderType, 
+        price, 
+        stopLoss, 
+        takeProfit, 
+        userId, 
+        botConfigId 
+      } = req.body;
       
       if (!symbol || !side || !amount || !orderType) {
         return res.status(400).json({ error: "Missing required parameters" });
       }
       
       const formatted = formatPair(symbol);
-      const order = await executeTradeSignal(formatted, side, amount, orderType, price);
+      const result = await executeTradeSignal(
+        formatted, 
+        side, 
+        amount, 
+        orderType, 
+        price, 
+        stopLoss, 
+        takeProfit
+      );
       
       // Log the trade in our system
       if (userId) {
-        const tradePrice = price || (order.price || order.average || 0) as number;
+        const userIdNum = parseInt(userId);
+        const tradePrice = price || (result.order.price || 0);
         
         // Create a trade with the correct type that includes the side info
         const tradeType = orderType === 'market' 
           ? (side === 'buy' ? 'market_buy' : 'market_sell')
           : (side === 'buy' ? 'limit_buy' : 'limit_sell');
           
-        await storage.addTrade({
-          userId: parseInt(userId),
+        const trade = await storage.addTrade({
+          userId: userIdNum,
           pair: symbol,
           type: tradeType,
           entryPrice: tradePrice.toString(),
@@ -473,15 +492,36 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           status: orderType === 'market' ? 'closed' : 'open'
         });
         
+        // Log the main order
         await storage.addBotLog({
-          userId: parseInt(userId),
+          userId: userIdNum,
           botConfigId: botConfigId ? parseInt(botConfigId) : null,
           message: `Signal executed: ${side.toUpperCase()} ${amount} ${symbol} at ${tradePrice} (${orderType})`,
           level: "info"
         });
+        
+        // Log stop loss order if placed
+        if (result.stopLossOrder) {
+          await storage.addBotLog({
+            userId: userIdNum,
+            botConfigId: botConfigId ? parseInt(botConfigId) : null,
+            message: `Stop loss order placed at ${result.stopLossOrder.price} (${Math.abs(stopLoss)}%)`,
+            level: "info"
+          });
+        }
+        
+        // Log take profit order if placed
+        if (result.takeProfitOrder) {
+          await storage.addBotLog({
+            userId: userIdNum,
+            botConfigId: botConfigId ? parseInt(botConfigId) : null,
+            message: `Take profit order placed at ${result.takeProfitOrder.price} (${Math.abs(takeProfit)}%)`,
+            level: "info"
+          });
+        }
       }
       
-      res.json(order);
+      res.json(result);
     } catch (error: any) {
       res.status(500).json({ error: `Failed to execute trade signal: ${error.message}` });
     }

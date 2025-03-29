@@ -1,19 +1,11 @@
 import { 
-  users, 
-  User, 
-  InsertUser, 
-  BotConfig, 
-  InsertBotConfig, 
-  Trade, 
-  InsertTrade, 
-  OrderBlock, 
-  InsertOrderBlock, 
-  BotLog, 
-  InsertBotLog 
-} from "@shared/schema";
-import { calculateEMA } from "@/lib/charts";
+  User, InsertUser, 
+  BotConfig, InsertBotConfig, 
+  Trade, InsertTrade, 
+  OrderBlock, InsertOrderBlock,
+  BotLog, InsertBotLog
+} from '@shared/schema';
 
-// Interface for all storage operations
 export interface IStorage {
   // User operations
   getUser(id: number): Promise<User | undefined>;
@@ -81,91 +73,55 @@ export class MemStorage implements IStorage {
   }
 
   private initializeData() {
-    // Generate mock chart data for different pairs and timeframes
-    const pairs = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT'];
-    const timeframes = ['5m', '15m', '1h', '4h', '1d'];
+    // Pre-populate chart data for common crypto pairs
+    const pairs = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT'];
+    const timeframes = ['1m', '5m', '15m', '1h', '4h', '1d'];
 
-    pairs.forEach(pair => {
-      timeframes.forEach(timeframe => {
-        const key = `${pair}_${timeframe}`;
+    for (const pair of pairs) {
+      for (const timeframe of timeframes) {
+        const key = `${pair}-${timeframe}`;
         this.chartData.set(key, this.generateCandlestickData(pair, timeframe));
-      });
-    });
-
-    // Generate sample order blocks
-    const sampleOrderBlocks: InsertOrderBlock[] = [
-      {
-        userId: 1,
-        pair: 'BTC/USDT',
-        timeframe: '4h',
-        type: 'BULLISH',
-        priceHigh: '45000',
-        priceLow: '44000',
-        startTime: new Date('2023-05-01'),
-        active: true
-      },
-      {
-        userId: 1,
-        pair: 'ETH/USDT',
-        timeframe: '1h',
-        type: 'BEARISH',
-        priceHigh: '3200',
-        priceLow: '3100',
-        startTime: new Date('2023-05-02'),
-        active: true
-      },
-      {
-        userId: 1,
-        pair: 'SOL/USDT',
-        timeframe: '4h',
-        type: 'BULLISH',
-        priceHigh: '90',
-        priceLow: '85',
-        startTime: new Date('2023-05-03'),
-        active: true
       }
-    ];
-
-    sampleOrderBlocks.forEach(ob => {
-      this.addOrderBlock(ob);
-    });
+    }
   }
 
   private generateCandlestickData(pair: string, timeframe: string): any[] {
-    const basePrice = pair.startsWith('BTC') ? 45000 : pair.startsWith('ETH') ? 3000 : 80;
-    const volatility = pair.startsWith('BTC') ? 500 : pair.startsWith('ETH') ? 50 : 5;
-    const candleCount = 200;
-    
-    const now = new Date();
-    const timeIncrement = 
-      timeframe === '5m' ? 5 * 60 * 1000 :
-      timeframe === '15m' ? 15 * 60 * 1000 :
-      timeframe === '1h' ? 60 * 60 * 1000 :
-      timeframe === '4h' ? 4 * 60 * 60 * 1000 :
-      24 * 60 * 60 * 1000; // 1d
-    
-    let price = basePrice;
-    let time = new Date(now.getTime() - (candleCount * timeIncrement));
-    
     const data = [];
+    const now = new Date();
+    let time = now.getTime() - (3600 * 24 * 30 * 1000); // 30 days ago
     
-    for (let i = 0; i < candleCount; i++) {
-      const change = (Math.random() - 0.5) * 2 * volatility;
+    const timeMultiplier = {
+      '1m': 60 * 1000,
+      '5m': 5 * 60 * 1000,
+      '15m': 15 * 60 * 1000,
+      '1h': 60 * 60 * 1000,
+      '4h': 4 * 60 * 60 * 1000,
+      '1d': 24 * 60 * 60 * 1000
+    }[timeframe] || 60 * 60 * 1000;
+    
+    const basePrice = pair.startsWith('BTC') ? 45000 : pair.startsWith('ETH') ? 3000 : 300;
+    let price = basePrice;
+    
+    while (time < now.getTime()) {
+      const volatility = Math.random() * 0.03; // 3% max volatility
+      const change = price * volatility * (Math.random() > 0.5 ? 1 : -1);
+      
       const open = price;
-      const close = open + change;
-      const high = Math.max(open, close) + Math.random() * volatility / 2;
-      const low = Math.min(open, close) - Math.random() * volatility / 2;
+      const close = price + change;
+      const high = Math.max(open, close) + Math.random() * Math.abs(change) * 0.5;
+      const low = Math.min(open, close) - Math.random() * Math.abs(change) * 0.5;
       
       data.push({
-        time: time.getTime() / 1000,
-        open: open,
-        high: high,
-        low: low,
-        close: close
+        time: time / 1000, // Convert to unix timestamp (seconds)
+        open,
+        high,
+        low,
+        close,
+        volume: Math.random() * 100
       });
       
       price = close;
-      time = new Date(time.getTime() + timeIncrement);
+      time += timeMultiplier;
     }
     
     return data;
@@ -176,48 +132,30 @@ export class MemStorage implements IStorage {
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username.toLowerCase() === username.toLowerCase()
-    );
+    return Array.from(this.users.values()).find(user => user.username === username);
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.email && user.email.toLowerCase() === email.toLowerCase()
-    );
+    return Array.from(this.users.values()).find(user => user.email === email);
   }
-  
+
   async getUserByFirebaseUid(firebaseUid: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.firebaseUid === firebaseUid
-    );
+    return Array.from(this.users.values()).find(user => user.firebaseUid === firebaseUid);
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
     const id = this.userIdCounter++;
-    const createdAt = new Date();
-    
-    // Create a properly typed User object with all required fields
     const user: User = {
+      ...insertUser,
       id,
-      username: insertUser.username,
-      password: insertUser.password,
-      email: insertUser.email,
-      balance: "10000.00",
-      createdAt,
-      
-      // Optional fields with proper null handling
-      firebaseUid: insertUser.firebaseUid ?? null
+      createdAt: new Date()
     };
-    
     this.users.set(id, user);
     return user;
   }
 
   async getBotConfig(userId: number): Promise<BotConfig | undefined> {
-    return Array.from(this.botConfigs.values()).find(
-      (config) => config.userId === userId
-    );
+    return Array.from(this.botConfigs.values()).find(config => config.userId === userId);
   }
 
   async getBotConfigById(id: number): Promise<BotConfig | undefined> {
@@ -225,49 +163,27 @@ export class MemStorage implements IStorage {
   }
 
   async saveBotConfig(config: InsertBotConfig): Promise<BotConfig> {
-    // Check if config already exists for this user
+    // Check if a config for this userId already exists
     const existingConfig = await this.getBotConfig(config.userId);
     
+    const now = new Date();
+    
     if (existingConfig) {
-      // Update existing config with proper null handling
       const updatedConfig: BotConfig = {
-        id: existingConfig.id,
-        userId: config.userId,
-        exchange: config.exchange,
-        tradingPair: config.tradingPair,
-        timeframe: config.timeframe,
-        emaPeriods: config.emaPeriods,
-        riskPercent: config.riskPercent,
-        rrRatio: config.rrRatio,
-        isActive: config.isActive ?? existingConfig.isActive,
-        createdAt: existingConfig.createdAt,
-        updatedAt: new Date(),
-        apiKey: config.apiKey ?? existingConfig.apiKey,
-        apiSecret: config.apiSecret ?? existingConfig.apiSecret
+        ...existingConfig,
+        ...config,
+        updatedAt: now
       };
-      
       this.botConfigs.set(existingConfig.id, updatedConfig);
       return updatedConfig;
     } else {
-      // Create new config with proper null handling
       const id = this.configIdCounter++;
-      const now = new Date();
       const newConfig: BotConfig = {
+        ...config,
         id,
-        userId: config.userId,
-        exchange: config.exchange,
-        tradingPair: config.tradingPair,
-        timeframe: config.timeframe,
-        emaPeriods: config.emaPeriods,
-        riskPercent: config.riskPercent,
-        rrRatio: config.rrRatio,
-        isActive: config.isActive ?? false,
         createdAt: now,
-        updatedAt: now,
-        apiKey: config.apiKey ?? null,
-        apiSecret: config.apiSecret ?? null
+        updatedAt: now
       };
-      
       this.botConfigs.set(id, newConfig);
       return newConfig;
     }
@@ -292,39 +208,33 @@ export class MemStorage implements IStorage {
   async getTradeHistory(userId: number, page: number = 1, limit: number = 10): Promise<{ trades: Trade[], total: number }> {
     const userTrades = Array.from(this.trades.values())
       .filter(trade => trade.userId === userId)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      .sort((a, b) => {
+        // Sort by created date if available, otherwise use ids (newer trades have higher ids)
+        if (a.createdAt && b.createdAt) {
+          return b.createdAt.getTime() - a.createdAt.getTime();
+        }
+        return b.id - a.id;
+      });
     
     const total = userTrades.length;
-    const startIdx = (page - 1) * limit;
-    const endIdx = startIdx + limit;
-    const paginatedTrades = userTrades.slice(startIdx, endIdx);
+    const start = (page - 1) * limit;
+    const end = start + limit;
+    const trades = userTrades.slice(start, end);
     
-    return { trades: paginatedTrades, total };
+    return { trades, total };
   }
 
   async addTrade(insertTrade: InsertTrade): Promise<Trade> {
     const id = this.tradeIdCounter++;
-    const createdAt = new Date();
-    
-    // Create a properly typed Trade object with all required fields
+    const now = new Date();
     const trade: Trade = {
-      id, 
-      userId: insertTrade.userId,
-      pair: insertTrade.pair,
-      type: insertTrade.type,
-      entryPrice: insertTrade.entryPrice,
-      amount: insertTrade.amount,
-      status: insertTrade.status,
-      createdAt,
-      
-      // Optional fields with proper null handling
-      botConfigId: insertTrade.botConfigId ?? null,
-      exitPrice: insertTrade.exitPrice ?? null,
-      stopLoss: insertTrade.stopLoss ?? null,
-      takeProfit: insertTrade.takeProfit ?? null,
-      result: insertTrade.result ?? null,
-      notes: insertTrade.notes ?? null,
-      closedAt: insertTrade.status === 'CLOSED' ? new Date() : null
+      ...insertTrade,
+      id,
+      status: insertTrade.status || 'open',
+      pnl: 0,
+      pnlPercentage: 0,
+      createdAt: now,
+      updatedAt: now
     };
     
     this.trades.set(id, trade);
@@ -332,13 +242,15 @@ export class MemStorage implements IStorage {
   }
 
   async getPerformanceStats(userId: number, timeframe: string = 'week'): Promise<{ winRate: number, avgRR: number, totalTrades: number, totalProfit: number }> {
-    // Get all user trades
     const userTrades = Array.from(this.trades.values())
-      .filter(trade => trade.userId === userId && trade.status === 'CLOSED');
+      .filter(trade => trade.userId === userId && trade.status === 'closed');
     
-    // Filter by timeframe
-    const now = new Date();
+    if (userTrades.length === 0) {
+      return { winRate: 0, avgRR: 0, totalTrades: 0, totalProfit: 0 };
+    }
+    
     let cutoffDate: Date;
+    const now = new Date();
     
     switch (timeframe) {
       case 'day':
@@ -350,69 +262,56 @@ export class MemStorage implements IStorage {
       case 'month':
         cutoffDate = new Date(now.setMonth(now.getMonth() - 1));
         break;
+      case 'year':
+        cutoffDate = new Date(now.setFullYear(now.getFullYear() - 1));
+        break;
       default:
-        cutoffDate = new Date(now.setDate(now.getDate() - 7)); // Default to week
+        cutoffDate = new Date(0); // Beginning of time
     }
     
-    const filteredTrades = userTrades.filter(
-      trade => new Date(trade.createdAt) >= cutoffDate
-    );
+    const filteredTrades = userTrades.filter(trade => {
+      if (!trade.createdAt) return true; // Include trades without creation date
+      return trade.createdAt >= cutoffDate;
+    });
     
-    // Calculate stats
-    const totalTrades = filteredTrades.length;
+    const winningTrades = filteredTrades.filter(trade => (trade.pnl || 0) > 0);
+    const winRate = filteredTrades.length > 0 ? (winningTrades.length / filteredTrades.length) * 100 : 0;
     
-    if (totalTrades === 0) {
-      return { winRate: 0, avgRR: 0, totalTrades: 0, totalProfit: 0 };
-    }
+    const totalProfit = filteredTrades.reduce((sum, trade) => sum + (trade.pnl || 0), 0);
     
-    const winningTrades = filteredTrades.filter(
-      trade => trade.result && parseFloat(trade.result.toString()) > 0
-    );
+    // Calculate risk-reward ratio
+    const winningRR = winningTrades.map(trade => {
+      const profit = trade.pnl || 0;
+      // Parse amount as number with fallback to 1 if parsing fails
+      const amount = parseFloat(trade.amount) || 1;
+      const risk = amount * 0.01; // Assuming 1% risk per trade as default
+      return profit / risk;
+    });
     
-    const winRate = (winningTrades.length / totalTrades) * 100;
-    
-    // Calculate total profit
-    const totalProfit = filteredTrades.reduce(
-      (sum, trade) => sum + (trade.result ? parseFloat(trade.result.toString()) : 0),
-      0
-    );
-    
-    // Simulate RR calculation - in a real app this would use stop loss and take profit levels
-    const avgRR = parseFloat((Math.random() * 1.5 + 1).toFixed(2));
+    const avgRR = winningRR.length > 0 
+      ? winningRR.reduce((sum, rr) => sum + rr, 0) / winningRR.length 
+      : 0;
     
     return {
-      winRate: parseFloat(winRate.toFixed(2)),
+      winRate,
       avgRR,
-      totalTrades,
-      totalProfit: parseFloat(totalProfit.toFixed(2))
+      totalTrades: filteredTrades.length,
+      totalProfit
     };
   }
 
   async getOrderBlocks(userId: number): Promise<OrderBlock[]> {
     return Array.from(this.orderBlocks.values())
-      .filter(ob => ob.userId === userId && ob.active)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      .filter(block => block.userId === userId)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   }
 
   async addOrderBlock(insertOrderBlock: InsertOrderBlock): Promise<OrderBlock> {
     const id = this.orderBlockIdCounter++;
-    const createdAt = new Date();
-    
-    // Create a properly typed OrderBlock object with all required fields
     const orderBlock: OrderBlock = {
+      ...insertOrderBlock,
       id,
-      userId: insertOrderBlock.userId,
-      pair: insertOrderBlock.pair,
-      timeframe: insertOrderBlock.timeframe,
-      type: insertOrderBlock.type,
-      priceHigh: insertOrderBlock.priceHigh,
-      priceLow: insertOrderBlock.priceLow,
-      startTime: insertOrderBlock.startTime,
-      createdAt,
-      
-      // Optional fields with proper null handling
-      endTime: insertOrderBlock.endTime ?? null,
-      active: insertOrderBlock.active ?? true
+      status: 'ACTIVE'
     };
     
     this.orderBlocks.set(id, orderBlock);
@@ -422,24 +321,27 @@ export class MemStorage implements IStorage {
   async getBotLogs(userId: number, limit: number = 20): Promise<BotLog[]> {
     return Array.from(this.botLogs.values())
       .filter(log => log.userId === userId)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .sort((a, b) => {
+        // Use timestamp if available, fallback to createdAt, then to id (newer logs have higher ids)
+        if (a.timestamp && b.timestamp) {
+          return b.timestamp.getTime() - a.timestamp.getTime();
+        }
+        if (a.createdAt && b.createdAt) {
+          return b.createdAt.getTime() - a.createdAt.getTime();
+        }
+        return b.id - a.id;
+      })
       .slice(0, limit);
   }
 
   async addBotLog(insertLog: InsertBotLog): Promise<BotLog> {
     const id = this.botLogIdCounter++;
-    const createdAt = new Date();
-    
-    // Create a properly typed BotLog object with all required fields
+    const timestamp = new Date();
     const log: BotLog = {
+      ...insertLog,
       id,
-      userId: insertLog.userId,
-      message: insertLog.message,
-      createdAt,
-      
-      // Optional fields with proper null handling
-      botConfigId: insertLog.botConfigId ?? null,
-      level: insertLog.level ?? "info"
+      timestamp,
+      createdAt: timestamp
     };
     
     this.botLogs.set(id, log);
@@ -447,68 +349,45 @@ export class MemStorage implements IStorage {
   }
 
   async getChartData(pair: string, timeframe: string): Promise<any[]> {
-    const key = `${pair}_${timeframe}`;
-    const data = this.chartData.get(key) || [];
-    
-    if (data.length > 0) {
-      // Sort data by timestamp to ensure it's in the correct order
-      const sortedData = [...data].sort((a, b) => {
-        // Make sure timestamps are compared as numbers
-        const timeA = typeof a.time === 'number' ? a.time : parseFloat(a.time);
-        const timeB = typeof b.time === 'number' ? b.time : parseFloat(b.time);
-        return timeA - timeB;
-      });
-      
-      return sortedData;
-    }
-    
-    return data;
+    const key = `${pair}-${timeframe}`;
+    return this.chartData.get(key) || [];
   }
 
   async getEMA(pair: string, timeframe: string, period: number): Promise<any[]> {
-    // Get pre-sorted candlestick data from getChartData
     const candlesticks = await this.getChartData(pair, timeframe);
+    if (candlesticks.length === 0) return [];
     
-    if (candlesticks.length === 0) {
-      return [];
+    const closePrices = candlesticks.map(candle => candle.close);
+    
+    // Simple EMA calculation
+    const k = 2 / (period + 1);
+    let ema = [closePrices[0]];
+    
+    for (let i = 1; i < closePrices.length; i++) {
+      ema.push(closePrices[i] * k + ema[i - 1] * (1 - k));
     }
     
-    // Extract close prices
-    const prices = candlesticks.map(candle => parseFloat(candle.close));
-    
-    // Calculate EMA
-    const emaValues = calculateEMA(prices, period);
-    
-    // Format data for chart
-    const emaData = candlesticks.map((candle, index) => ({
-      time: candle.time,
-      value: emaValues[index]
+    return ema.map((value, index) => ({
+      time: candlesticks[index].time,
+      value
     }));
-    
-    // Return in the same chronological order as the candlesticks
-    return emaData;
   }
 
   async getCurrentPrice(pair: string): Promise<{ price: string, change: string }> {
-    const key = `${pair}_1h`;
-    const candles = this.chartData.get(key) || [];
-    
-    if (candles.length === 0) {
-      return { price: "0.00", change: "0.00" };
+    const candlesticks = await this.getChartData(pair, '1h');
+    if (candlesticks.length === 0) {
+      return { price: '0', change: '0' };
     }
     
-    const latestCandle = candles[candles.length - 1];
-    const previousCandle = candles[candles.length - 2];
+    const current = candlesticks[candlesticks.length - 1].close;
+    const previous = candlesticks[candlesticks.length - 2]?.close || current;
     
-    const price = latestCandle.close.toString();
+    const changePercent = ((current - previous) / previous) * 100;
     
-    let change = "0.00";
-    if (previousCandle) {
-      const priceChange = ((latestCandle.close - previousCandle.close) / previousCandle.close) * 100;
-      change = priceChange.toFixed(2);
-    }
-    
-    return { price, change };
+    return {
+      price: current.toFixed(2),
+      change: changePercent.toFixed(2)
+    };
   }
 }
 
