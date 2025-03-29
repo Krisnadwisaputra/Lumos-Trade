@@ -1,16 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { 
-  getAuth, 
-  signInWithRedirect, 
-  signInWithPopup,
-  GoogleAuthProvider, 
-  getRedirectResult, 
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  signOut as firebaseSignOut,
-  User
-} from "firebase/auth";
+import { getAuth, signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, getRedirectResult } from "firebase/auth";
 
 // Firebase configuration
 const firebaseConfig = {
@@ -24,84 +13,70 @@ const firebaseConfig = {
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
 
-// Configure Google provider
+// Get Auth instance
+const auth = getAuth();
+
+// Google Auth Provider
 const googleProvider = new GoogleAuthProvider();
-googleProvider.setCustomParameters({
-  prompt: 'select_account'
-});
 
-// Functions for authentication
+// Sign in with Google (popup method)
 export const signInWithGoogle = async () => {
   try {
-    // In development or in environments where redirects are problematic (like iframes),
-    // use popup authentication instead
-    if (import.meta.env.DEV || window.location.hostname === 'replit.app' || window.location.hostname.includes('.repl.co')) {
-      console.log('Using popup authentication for Google sign-in');
-      const result = await signInWithPopup(auth, googleProvider);
-      return result.user;
-    } else {
-      // For production, use redirect auth
-      console.log('Using redirect authentication for Google sign-in');
-      await signInWithRedirect(auth, googleProvider);
-      return null; // Redirect will happen, no return value
-    }
+    const result = await signInWithPopup(auth, googleProvider);
+    return result.user;
   } catch (error) {
-    console.error('Google sign-in error:', error);
+    console.error("Error signing in with Google: ", error);
     throw error;
   }
 };
 
-// For backward compatibility with existing codebase
-export const signInWithGoogleRedirect = () => signInWithRedirect(auth, googleProvider);
-
-export const handleAuthRedirect = async () => {
+// Sign in with email and password
+export const signInWithEmail = async (email: string, password: string) => {
   try {
-    const result = await getRedirectResult(auth);
-    if (result) {
-      // User successfully authenticated
-      console.log('Successfully authenticated via redirect');
-      return result.user;
-    }
-    return null;
+    const result = await signInWithEmailAndPassword(auth, email, password);
+    return result.user;
   } catch (error) {
-    console.error("Error during authentication redirect:", error);
+    console.error("Error signing in with email: ", error);
     throw error;
   }
 };
 
-// Login with email/password
-export const loginUser = async (email: string, password: string) => {
+// Sign up with email and password
+export const signUpWithEmail = async (email: string, password: string) => {
   try {
-    const userCredential = await signInWithEmailAndPassword(auth, email, password);
-    return userCredential.user;
+    const result = await createUserWithEmailAndPassword(auth, email, password);
+    return result.user;
   } catch (error) {
-    console.error("Error signing in:", error);
-    throw error;
-  }
-};
-
-// Register new user with email/password
-export const registerUser = async (email: string, password: string) => {
-  try {
-    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-    return userCredential.user;
-  } catch (error) {
-    console.error("Error registering user:", error);
+    console.error("Error signing up with email: ", error);
     throw error;
   }
 };
 
 // Sign out
-export const logoutUser = () => {
-  return firebaseSignOut(auth);
+export const logout = async () => {
+  try {
+    await signOut(auth);
+  } catch (error) {
+    console.error("Error signing out: ", error);
+    throw error;
+  }
 };
 
 // Auth state change listener
-export const onAuthChange = (callback: (user: User | null) => void) => {
+export const onAuthChange = (callback: (user: any) => void) => {
   return onAuthStateChanged(auth, callback);
 };
 
+// Handle redirect result for Google sign-in
+export const handleAuthRedirect = async () => {
+  try {
+    const result = await getRedirectResult(auth);
+    return result?.user;
+  } catch (error) {
+    console.error("Error handling auth redirect: ", error);
+    throw error;
+  }
+};
+
 export { auth };
-export default app;

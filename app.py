@@ -547,4 +547,4 @@ def add_cors_headers(response):
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     logger.info(f"Starting Flask server on port {port}, with static folder {app.static_folder}")
-    app.run(host='0.0.0.0', port=port, debug=True)
+    app.run(host='0.0.0.0', port=port, debug=False) # Set debug=False to avoid reloader issues
