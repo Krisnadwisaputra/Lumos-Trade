@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Wifi, WifiOff, AlertCircle, Loader2 } from 'lucide-react';
+import { checkApiHealth } from '@/lib/apiService';
 
 interface ConnectionStatusProps {
   className?: string;
@@ -14,32 +15,43 @@ const ConnectionStatus = ({ className }: ConnectionStatusProps) => {
   const [tooltipText, setTooltipText] = useState<string>('Connecting to exchange...');
 
   useEffect(() => {
-    // Check if we have a WebSocket connection
+    // Check API health
     const checkConnection = async () => {
       try {
-        // Wait 2 seconds to simulate checking connection
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        // Start in connecting state
+        setConnectionState('connecting');
+        setTooltipText('Connecting to exchange...');
         
         // Check for custom events that will be dispatched from websocket service
         window.addEventListener('ws:connected', handleConnection);
         window.addEventListener('ws:error', handleError);
         window.addEventListener('ws:simulation', handleSimulation);
         
-        // Start in connecting state
-        setConnectionState('connecting');
-        setTooltipText('Connecting to exchange...');
+        // Check the API health endpoint
+        const healthStatus = await checkApiHealth();
         
-        // After 5 seconds, if still connecting, default to simulated mode
-        setTimeout(() => {
-          if (connectionState === 'connecting') {
-            setConnectionState('simulated');
-            setTooltipText('Using simulated data - No live connection established');
-          }
-        }, 5000);
+        if (healthStatus?.status === 'connected_to_binance') {
+          setConnectionState('connected');
+          setTooltipText('Connected to Binance API');
+          
+          // Dispatch a connected event for other components
+          window.dispatchEvent(new CustomEvent('ws:connected'));
+        } else if (healthStatus?.status === 'simulation') {
+          setConnectionState('simulated');
+          setTooltipText('Using simulated data - No live connection established');
+          
+          // Dispatch a simulation event for other components
+          window.dispatchEvent(new CustomEvent('ws:simulation'));
+        } else {
+          throw new Error('Unknown connection status');
+        }
       } catch (error) {
         console.error('Error checking connection:', error);
         setConnectionState('error');
         setTooltipText('Connection error. Check console for details.');
+        
+        // Dispatch an error event for other components
+        window.dispatchEvent(new CustomEvent('ws:error'));
       }
     };
 
@@ -60,10 +72,14 @@ const ConnectionStatus = ({ className }: ConnectionStatusProps) => {
 
     checkConnection();
 
+    // Check connection status every 30 seconds
+    const intervalId = setInterval(checkConnection, 30000);
+
     return () => {
       window.removeEventListener('ws:connected', handleConnection);
       window.removeEventListener('ws:error', handleError);
       window.removeEventListener('ws:simulation', handleSimulation);
+      clearInterval(intervalId);
     };
   }, []);
 

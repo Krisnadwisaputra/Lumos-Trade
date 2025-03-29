@@ -126,7 +126,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         await storage.addBotLog({
           userId: config.userId,
           botConfigId: configId,
-          message: `Successfully connected to ${config.exchange} API`,
+          message: `Successfully connected to exchange API`,
           level: "info"
         });
       }, 2000);
@@ -135,7 +135,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         await storage.addBotLog({
           userId: config.userId,
           botConfigId: configId,
-          message: `Analyzing EMA crossovers on ${config.tradingPair} ${config.timeframe}`,
+          message: `Analyzing EMA crossovers on ${config.pair} ${config.timeframe}`,
           level: "info"
         });
       }, 4000);

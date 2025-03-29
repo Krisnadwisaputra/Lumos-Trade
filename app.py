@@ -10,7 +10,7 @@ from binance.client import Client
 from binance.exceptions import BinanceAPIException
 import traceback
 
-app = Flask(__name__, static_folder='./client/dist')
+app = Flask(__name__, static_folder='./client')
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -516,21 +516,35 @@ def cancel_order():
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def serve(path):
+    # Add CORS headers
+    resp = None
+    
     if path != "" and os.path.exists(os.path.join(app.static_folder, path)):
-        return send_from_directory(app.static_folder, path)
+        resp = send_from_directory(app.static_folder, path)
     elif path == "":
         # Serve the index.html file for the root path
-        return send_from_directory('./client', 'index.html')
+        resp = send_from_directory(app.static_folder, 'index.html')
     else:
-        # Return API info for other paths
-        return jsonify({
+        # Return API info for other paths that don't match API routes
+        resp = jsonify({
             "name": "Lumos-Trade API",
             "version": "1.0.0",
             "status": "running",
             "mode": "simulation" if use_simulation else "live",
             "timestamp": datetime.now().isoformat()
         })
+    
+    return resp
+
+# Add CORS headers to all responses
+@app.after_request
+def add_cors_headers(response):
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization'
+    response.headers['Access-Control-Allow-Methods'] = 'GET,PUT,POST,DELETE,OPTIONS'
+    return response
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
+    logger.info(f"Starting Flask server on port {port}, with static folder {app.static_folder}")
     app.run(host='0.0.0.0', port=port, debug=True)
