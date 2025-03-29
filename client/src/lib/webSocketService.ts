@@ -8,14 +8,12 @@ class WebSocketService {
   private state: WebSocketState = 'connecting';
   private reconnectTimer: NodeJS.Timeout | null = null;
   private reconnectAttempts = 0;
-  private maxReconnectAttempts = 5;
-  private reconnectDelay = 2000; // 2 seconds
+  private maxReconnectAttempts = 1; // Reduced for quicker fallback to simulation
+  private reconnectDelay = 1000; // 1 second
 
   constructor() {
-    // Only initialize in browser environment
-    if (typeof window !== 'undefined') {
-      this.initializeSocket();
-    }
+    // Immediately go to simulation mode instead of trying real WebSocket in Replit
+    this.fallbackToSimulation();
   }
 
   private initializeSocket() {
@@ -109,12 +107,8 @@ class WebSocketService {
     console.error('WebSocket error:', event);
     this.setState('error');
     
-    // If still in error state after a brief timeout, fallback to simulation
-    setTimeout(() => {
-      if (this.state === 'error') {
-        this.fallbackToSimulation();
-      }
-    }, 3000);
+    // If still in error state, immediately fallback to simulation
+    this.fallbackToSimulation();
   }
   
   private attemptReconnect() {
