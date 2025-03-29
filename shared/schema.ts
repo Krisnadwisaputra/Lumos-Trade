@@ -1,145 +1,114 @@
-import { pgTable, text, serial, integer, boolean, timestamp, numeric } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
-import { z } from "zod";
+import { z } from 'zod';
 
-// User model
-export const users = pgTable("users", {
-  id: serial("id").primaryKey(),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull(),
-  email: text("email").notNull().unique(),
-  firebaseUid: text("firebase_uid"),
-  balance: numeric("balance").notNull().default("10000.00"),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
+// User schema
+export const userSchema = z.object({
+  id: z.number(),
+  username: z.string(),
+  email: z.string().email(),
+  firebaseUid: z.string().optional(),
+  createdAt: z.date()
 });
 
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
-  email: true,
-  firebaseUid: true,
+export const insertUserSchema = userSchema.omit({ id: true, createdAt: true });
+
+// Bot configuration schema
+export const botConfigSchema = z.object({
+  id: z.number(),
+  userId: z.number(),
+  isActive: z.boolean(),
+  pair: z.string(),
+  timeframe: z.string(),
+  strategy: z.enum(['EMA_CROSS', 'SMART_MONEY', 'COMBINED']),
+  emaFast: z.number().optional(),
+  emaSlow: z.number().optional(),
+  riskPerTrade: z.number(), // percentage
+  stopLoss: z.number(), // percentage
+  takeProfit: z.number(), // percentage
+  maxOpenPositions: z.number(),
+  createdAt: z.date(),
+  updatedAt: z.date()
 });
 
-// Bot configuration model
-export const botConfigs = pgTable("bot_configs", {
-  id: serial("id").primaryKey(),
-  userId: integer("user_id").notNull().references(() => users.id),
-  exchange: text("exchange").notNull(),
-  tradingPair: text("trading_pair").notNull(),
-  timeframe: text("timeframe").notNull(),
-  emaPeriods: text("ema_periods").notNull(),
-  riskPercent: numeric("risk_percent").notNull(),
-  rrRatio: numeric("rr_ratio").notNull(),
-  isActive: boolean("is_active").notNull().default(false),
-  apiKey: text("api_key"),
-  apiSecret: text("api_secret"),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+export const insertBotConfigSchema = botConfigSchema.omit({ 
+  id: true, 
+  createdAt: true, 
+  updatedAt: true 
 });
 
-export const insertBotConfigSchema = createInsertSchema(botConfigs).pick({
-  userId: true,
-  exchange: true,
-  tradingPair: true,
-  timeframe: true,
-  emaPeriods: true,
-  riskPercent: true,
-  rrRatio: true,
-  isActive: true,
-  apiKey: true,
-  apiSecret: true,
+// Trade schema
+export const tradeSchema = z.object({
+  id: z.number(),
+  userId: z.number(),
+  pair: z.string(),
+  type: z.string(), // e.g. 'market_buy', 'limit_sell', etc.
+  entryPrice: z.string(),
+  exitPrice: z.string().optional(),
+  amount: z.string(),
+  result: z.string().optional(), // profit/loss as string
+  status: z.string(), // 'open', 'closed', 'cancelled', etc.
+  pnl: z.number().optional(),
+  pnlPercentage: z.number().optional(),
+  botConfigId: z.number().nullable().optional(),
+  createdAt: z.date().optional(),
+  updatedAt: z.date().optional()
 });
 
-// Trade model
-export const trades = pgTable("trades", {
-  id: serial("id").primaryKey(),
-  userId: integer("user_id").notNull().references(() => users.id),
-  botConfigId: integer("bot_config_id").references(() => botConfigs.id),
-  pair: text("pair").notNull(),
-  type: text("type").notNull(), // BUY or SELL
-  entryPrice: numeric("entry_price").notNull(),
-  exitPrice: numeric("exit_price"),
-  amount: numeric("amount").notNull(),
-  stopLoss: numeric("stop_loss"),
-  takeProfit: numeric("take_profit"),
-  result: numeric("result"),
-  status: text("status").notNull(), // OPEN, CLOSED, CANCELLED
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-  closedAt: timestamp("closed_at"),
-  notes: text("notes"),
+export const insertTradeSchema = tradeSchema.omit({ 
+  id: true, 
+  pnl: true, 
+  pnlPercentage: true,
+  createdAt: true,
+  updatedAt: true
 });
 
-export const insertTradeSchema = createInsertSchema(trades).pick({
-  userId: true,
-  botConfigId: true,
-  pair: true,
-  type: true,
-  entryPrice: true,
-  exitPrice: true,
-  amount: true,
-  stopLoss: true,
-  takeProfit: true,
-  result: true,
-  status: true,
-  notes: true,
+// Order block schema
+export const orderBlockSchema = z.object({
+  id: z.number(),
+  userId: z.number(),
+  pair: z.string(),
+  timeframe: z.string(),
+  type: z.enum(['BULLISH', 'BEARISH']),
+  price: z.number(),
+  volume: z.number(),
+  createdAt: z.date(),
+  validUntil: z.date(),
+  status: z.enum(['ACTIVE', 'TRIGGERED', 'EXPIRED'])
 });
 
-// Order block (OB) zone model for Smart Money Concepts
-export const orderBlocks = pgTable("order_blocks", {
-  id: serial("id").primaryKey(),
-  userId: integer("user_id").notNull().references(() => users.id),
-  pair: text("pair").notNull(),
-  timeframe: text("timeframe").notNull(),
-  type: text("type").notNull(), // BULLISH or BEARISH
-  priceHigh: numeric("price_high").notNull(),
-  priceLow: numeric("price_low").notNull(),
-  startTime: timestamp("start_time").notNull(),
-  endTime: timestamp("end_time"),
-  active: boolean("active").notNull().default(true),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
+export const insertOrderBlockSchema = orderBlockSchema.omit({ 
+  id: true, 
+  status: true 
 });
 
-export const insertOrderBlockSchema = createInsertSchema(orderBlocks).pick({
-  userId: true,
-  pair: true,
-  timeframe: true,
-  type: true,
-  priceHigh: true,
-  priceLow: true,
-  startTime: true,
-  endTime: true,
-  active: true,
+// Bot log schema
+export const botLogSchema = z.object({
+  id: z.number(),
+  userId: z.number(),
+  botConfigId: z.number().nullable().optional(),
+  message: z.string(),
+  level: z.string(), // 'info', 'error', 'warning', 'success'
+  timestamp: z.date().optional(),
+  createdAt: z.date().optional()
 });
 
-// Bot activity logs
-export const botLogs = pgTable("bot_logs", {
-  id: serial("id").primaryKey(),
-  userId: integer("user_id").notNull().references(() => users.id),
-  botConfigId: integer("bot_config_id").references(() => botConfigs.id),
-  message: text("message").notNull(),
-  level: text("level").notNull().default("info"), // info, warning, error
-  createdAt: timestamp("created_at").notNull().defaultNow(),
+export const insertBotLogSchema = botLogSchema.omit({ 
+  id: true,
+  timestamp: true,
+  createdAt: true
 });
 
-export const insertBotLogSchema = createInsertSchema(botLogs).pick({
-  userId: true,
-  botConfigId: true,
-  message: true,
-  level: true,
-});
-
-// Types
-export type User = typeof users.$inferSelect;
+// Type exports
+export type User = z.infer<typeof userSchema>;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 
-export type BotConfig = typeof botConfigs.$inferSelect;
+export type BotConfig = z.infer<typeof botConfigSchema>;
 export type InsertBotConfig = z.infer<typeof insertBotConfigSchema>;
 
-export type Trade = typeof trades.$inferSelect;
+export type Trade = z.infer<typeof tradeSchema>;
 export type InsertTrade = z.infer<typeof insertTradeSchema>;
 
-export type OrderBlock = typeof orderBlocks.$inferSelect;
+export type OrderBlock = z.infer<typeof orderBlockSchema>;
 export type InsertOrderBlock = z.infer<typeof insertOrderBlockSchema>;
 
-export type BotLog = typeof botLogs.$inferSelect;
+export type BotLog = z.infer<typeof botLogSchema>;
 export type InsertBotLog = z.infer<typeof insertBotLogSchema>;

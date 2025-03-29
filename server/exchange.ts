@@ -1,201 +1,171 @@
 import * as ccxt from 'ccxt';
-import { log } from './vite';
 
-// Initialize the Binance exchange with API credentials
-const initializeBinance = () => {
-  try {
-    console.log('Creating Binance exchange instance...');
-    const apiKey = process.env.BINANCE_API_KEY;
-    const apiSecret = process.env.BINANCE_API_SECRET;
-    
-    console.log(`API Key present: ${!!apiKey}, API Secret present: ${!!apiSecret}`);
-    
-    const binance = new ccxt.binance({
-      apiKey: apiKey,
-      secret: apiSecret,
-      enableRateLimit: true,
-      options: {
-        defaultType: 'spot',
-      }
-    });
+// Define a simplified order type to avoid TS issues with ccxt
+interface SimplifiedOrder {
+  id: string;
+  status: string;
+  symbol: string;
+  type: string;
+  side: string;
+  price: number;
+  amount: number;
+  cost: number;
+  filled: number;
+  remaining: number;
+  timestamp: number;
+  datetime: string;
+  [key: string]: any;
+}
 
-    console.log('Binance exchange instance created successfully');
-    log('Binance exchange initialized successfully', 'exchange');
-    return binance;
-  } catch (error) {
-    console.error(`Error initializing Binance: ${error}`);
-    log(`Error initializing Binance: ${error}`, 'exchange');
-    throw new Error(`Failed to initialize Binance exchange: ${error}`);
-  }
-};
+// Initialize exchange with API keys
+let exchange: ccxt.Exchange;
 
-// Singleton instance of the exchange
-let exchange: ccxt.Exchange | null = null;
-
-// Get exchange instance (create if doesn't exist)
+// Get the initialized exchange instance
 export const getExchange = (): ccxt.Exchange => {
   if (!exchange) {
-    exchange = initializeBinance();
+    initializeExchange();
   }
   return exchange;
 };
 
-// Fetch account balance
+// Initialize the exchange with API keys
+export const initializeExchange = (): void => {
+  // Check if API keys are available
+  const apiKey = process.env.BINANCE_API_KEY;
+  const apiSecret = process.env.BINANCE_API_SECRET;
+
+  if (!apiKey || !apiSecret) {
+    console.warn('Binance API keys not found. Running in simulation mode.');
+    // Initialize with empty config for public endpoints only
+    exchange = new ccxt.binance();
+  } else {
+    // Initialize with API keys
+    exchange = new ccxt.binance({
+      apiKey,
+      secret: apiSecret,
+      enableRateLimit: true
+    });
+  }
+};
+
+// Get account balance
 export const getAccountBalance = async (): Promise<any> => {
   try {
     const exchange = getExchange();
     
-    try {
-      // First try to get real balance
-      const balance = await exchange.fetchBalance();
-      
-      // Process the balance data to ensure consistent format
-      const processedBalance: { [key: string]: { free: number, used: number, total: number } } = {};
-      
-      // Extract only the relevant currency balances (non-zero)
-      for (const [currency, data] of Object.entries(balance)) {
-        if (currency !== 'info' && currency !== 'timestamp' && currency !== 'datetime' && 
-            currency !== 'free' && currency !== 'used' && currency !== 'total') {
-          processedBalance[currency] = {
-            free: Number(data.free) || 0,
-            used: Number(data.used) || 0,
-            total: Number(data.total) || 0
-          };
-        }
-      }
-      
-      log(`Retrieved real balance data from exchange`, 'exchange');
-      return processedBalance;
-    } catch (fetchError) {
-      // If accessing the real exchange fails, provide simulated balance
-      log(`Error fetching real balance, providing simulated balance: ${fetchError}`, 'exchange');
-      
-      // Create simulated balance data
-      const simulatedBalance: { [key: string]: { free: number, used: number, total: number } } = {
-        USDT: {
-          free: 10250.50,
-          used: 0,
-          total: 10250.50
-        },
-        BTC: {
-          free: 0.15,
-          used: 0,
-          total: 0.15
-        },
-        ETH: {
-          free: 1.25,
-          used: 0,
-          total: 1.25
-        }
+    if (!exchange.apiKey) {
+      return {
+        USDT: { free: 10000, used: 0, total: 10000 },
+        BTC: { free: 0.5, used: 0, total: 0.5 },
+        ETH: { free: 5, used: 0, total: 5 }
       };
-      
-      return simulatedBalance;
     }
+    
+    await exchange.loadMarkets();
+    const balance = await exchange.fetchBalance();
+    return balance;
   } catch (error) {
-    log(`Critical error fetching balance: ${error}`, 'exchange');
-    throw new Error(`Failed to fetch account balance: ${error}`);
+    console.error('Error fetching account balance:', error);
+    throw error;
   }
 };
 
-// Fetch market price for a symbol
+// Get current market price
 export const getMarketPrice = async (symbol: string): Promise<{ price: number, timestamp: number }> => {
   try {
     const exchange = getExchange();
+    await exchange.loadMarkets();
     
-    try {
-      // Try to get real price from the exchange
-      const ticker = await exchange.fetchTicker(symbol);
-      log(`Retrieved real price data from exchange for ${symbol}: ${ticker.last}`, 'exchange');
-      return {
-        price: ticker.last || 0,
-        timestamp: ticker.timestamp || Date.now()
-      };
-    } catch (fetchError) {
-      // If the real price lookup fails, provide simulated data
-      log(`Error fetching real price, providing simulated price for ${symbol}: ${fetchError}`, 'exchange');
-      
-      // Provide appropriate default based on symbol
-      let simulatedPrice = 0;
-      if (symbol.includes('BTC')) {
-        simulatedPrice = 42000 + (Math.random() * 2000 - 1000); // Random BTC price around 42000
-      } else if (symbol.includes('ETH')) {
-        simulatedPrice = 3000 + (Math.random() * 200 - 100); // Random ETH price around 3000
-      } else if (symbol.includes('BNB')) {
-        simulatedPrice = 500 + (Math.random() * 50 - 25); // Random BNB price around 500
-      } else if (symbol.includes('SOL')) {
-        simulatedPrice = 120 + (Math.random() * 20 - 10); // Random SOL price around 120
-      } else {
-        simulatedPrice = 1 + (Math.random() * 0.1 - 0.05); // Generic price around 1
-      }
-      
-      return {
-        price: simulatedPrice,
-        timestamp: Date.now()
-      };
-    }
+    const ticker = await exchange.fetchTicker(symbol);
+    // Ensure we have valid numbers
+    const price = typeof ticker.last === 'number' ? ticker.last : 0;
+    const timestamp = typeof ticker.timestamp === 'number' ? ticker.timestamp : Date.now();
+    
+    return { price, timestamp };
   } catch (error) {
-    log(`Critical error fetching market price for ${symbol}: ${error}`, 'exchange');
-    throw new Error(`Failed to fetch market price for ${symbol}: ${error}`);
+    console.error(`Error fetching market price for ${symbol}:`, error);
+    throw error;
   }
 };
 
-// Create a market order
+// Create market order
 export const createMarketOrder = async (
   symbol: string,
   side: 'buy' | 'sell',
   amount: number
-): Promise<ccxt.Order> => {
+): Promise<SimplifiedOrder> => {
   try {
     const exchange = getExchange();
-    const order = await exchange.createOrder(symbol, 'market', side, amount);
-    log(`Created ${side} market order for ${amount} ${symbol}`, 'exchange');
-    return order;
+    await exchange.loadMarkets();
+    
+    if (!exchange.apiKey) {
+      throw new Error('API keys required for creating orders');
+    }
+    
+    const order = await exchange.createMarketOrder(symbol, side, amount);
+    return normalizeOrder(order);
   } catch (error) {
-    log(`Error creating market order: ${error}`, 'exchange');
-    throw new Error(`Failed to create market order: ${error}`);
+    console.error(`Error creating market order for ${symbol}:`, error);
+    throw error;
   }
 };
 
-// Create a limit order
+// Create limit order
 export const createLimitOrder = async (
   symbol: string,
   side: 'buy' | 'sell',
   amount: number,
   price: number
-): Promise<ccxt.Order> => {
+): Promise<SimplifiedOrder> => {
   try {
     const exchange = getExchange();
-    const order = await exchange.createOrder(symbol, 'limit', side, amount, price);
-    log(`Created ${side} limit order for ${amount} ${symbol} at ${price}`, 'exchange');
-    return order;
+    await exchange.loadMarkets();
+    
+    if (!exchange.apiKey) {
+      throw new Error('API keys required for creating orders');
+    }
+    
+    const order = await exchange.createLimitOrder(symbol, side, amount, price);
+    return normalizeOrder(order);
   } catch (error) {
-    log(`Error creating limit order: ${error}`, 'exchange');
-    throw new Error(`Failed to create limit order: ${error}`);
+    console.error(`Error creating limit order for ${symbol}:`, error);
+    throw error;
   }
 };
 
-// Fetch open orders
+// Get open orders
 export const getOpenOrders = async (symbol?: string): Promise<ccxt.Order[]> => {
   try {
     const exchange = getExchange();
+    await exchange.loadMarkets();
+    
+    if (!exchange.apiKey) {
+      return []; // Return empty array in simulation mode
+    }
+    
     const orders = await exchange.fetchOpenOrders(symbol);
     return orders;
   } catch (error) {
-    log(`Error fetching open orders: ${error}`, 'exchange');
-    throw new Error(`Failed to fetch open orders: ${error}`);
+    console.error('Error fetching open orders:', error);
+    throw error;
   }
 };
 
-// Cancel an order
+// Cancel order
 export const cancelOrder = async (orderId: string, symbol: string): Promise<any> => {
   try {
     const exchange = getExchange();
+    await exchange.loadMarkets();
+    
+    if (!exchange.apiKey) {
+      throw new Error('API keys required for cancelling orders');
+    }
+    
     const result = await exchange.cancelOrder(orderId, symbol);
-    log(`Cancelled order ${orderId} for ${symbol}`, 'exchange');
     return result;
   } catch (error) {
-    log(`Error cancelling order: ${error}`, 'exchange');
-    throw new Error(`Failed to cancel order: ${error}`);
+    console.error(`Error cancelling order ${orderId}:`, error);
+    throw error;
   }
 };
 
@@ -203,70 +173,149 @@ export const cancelOrder = async (orderId: string, symbol: string): Promise<any>
 export const getOrderStatus = async (orderId: string, symbol: string): Promise<ccxt.Order> => {
   try {
     const exchange = getExchange();
+    await exchange.loadMarkets();
+    
+    if (!exchange.apiKey) {
+      throw new Error('API keys required for fetching order status');
+    }
+    
     const order = await exchange.fetchOrder(orderId, symbol);
     return order;
   } catch (error) {
-    log(`Error fetching order status: ${error}`, 'exchange');
-    throw new Error(`Failed to fetch order status: ${error}`);
+    console.error(`Error fetching order status for ${orderId}:`, error);
+    throw error;
   }
 };
 
-// Fetch historical trades
+// Get trade history
 export const getTradeHistory = async (symbol: string, since?: number, limit?: number): Promise<ccxt.Trade[]> => {
   try {
     const exchange = getExchange();
+    await exchange.loadMarkets();
+    
+    if (!exchange.apiKey) {
+      return []; // Return empty array in simulation mode
+    }
+    
     const trades = await exchange.fetchMyTrades(symbol, since, limit);
     return trades;
   } catch (error) {
-    log(`Error fetching trade history: ${error}`, 'exchange');
-    throw new Error(`Failed to fetch trade history: ${error}`);
+    console.error(`Error fetching trade history for ${symbol}:`, error);
+    throw error;
   }
 };
 
-// Support for handling trade signals and automated order execution
+// Execute trade based on signal
 export const executeTradeSignal = async (
   symbol: string,
-  side: 'buy' | 'sell',
+  signal: 'BUY' | 'SELL',
   amount: number,
-  orderType: 'market' | 'limit',
-  price?: number
-): Promise<ccxt.Order> => {
+  stopLoss?: number,
+  takeProfit?: number
+): Promise<{ order: SimplifiedOrder, stopLossOrder?: SimplifiedOrder, takeProfitOrder?: SimplifiedOrder }> => {
   try {
-    if (orderType === 'market') {
-      return await createMarketOrder(symbol, side, amount);
-    } else if (orderType === 'limit' && price) {
-      return await createLimitOrder(symbol, side, amount, price);
-    } else {
-      throw new Error('Invalid order parameters');
-    }
-  } catch (error) {
-    log(`Error executing trade signal: ${error}`, 'exchange');
-    throw new Error(`Failed to execute trade signal: ${error}`);
-  }
-};
-
-// Format pair to correct exchange format
-export const formatPair = (pair: string): string => {
-  // Convert format like 'BTC/USDT' to 'BTCUSDT' for Binance
-  return pair.replace('/', '');
-};
-
-// Initialize the exchange when the server starts
-export const initializeExchange = (): void => {
-  console.log('Attempting to initialize exchange connection...');
-  try {
-    if (!process.env.BINANCE_API_KEY || !process.env.BINANCE_API_SECRET) {
-      console.log('Warning: Binance API credentials not found in environment variables.');
-      log('Binance API credentials not found. Live trading will not be available.', 'exchange');
-      return;
+    const exchange = getExchange();
+    await exchange.loadMarkets();
+    
+    if (!exchange.apiKey) {
+      throw new Error('API keys required for executing trade signals');
     }
     
-    console.log('Binance API credentials found, initializing exchange...');
-    getExchange();
-    console.log('Exchange integration initialized successfully');
-    log('Exchange integration ready for live trading', 'exchange');
+    // Execute main order
+    const side = signal.toLowerCase() as 'buy' | 'sell';
+    const orderResponse = await exchange.createMarketOrder(symbol, side, amount);
+    const mainOrder = normalizeOrder(orderResponse);
+    
+    let stopLossOrder;
+    let takeProfitOrder;
+    
+    // If trade was successful and stopLoss/takeProfit are specified
+    if (mainOrder && mainOrder.status === 'closed') {
+      const oppositeAction = signal === 'BUY' ? 'sell' : 'buy';
+      const currentPrice = mainOrder.price || (await getMarketPrice(symbol)).price;
+      
+      // Place stop loss order if specified
+      if (stopLoss) {
+        const stopPrice = signal === 'BUY' 
+          ? currentPrice * (1 - stopLoss / 100) 
+          : currentPrice * (1 + stopLoss / 100);
+        
+        // Not all exchanges support stop loss orders directly
+        // Using limit orders instead as a fallback
+        const slOrderResponse = await exchange.createLimitOrder(
+          symbol,
+          oppositeAction,
+          amount,
+          stopPrice
+        );
+        stopLossOrder = normalizeOrder(slOrderResponse);
+      }
+      
+      // Place take profit order if specified
+      if (takeProfit) {
+        const limitPrice = signal === 'BUY'
+          ? currentPrice * (1 + takeProfit / 100)
+          : currentPrice * (1 - takeProfit / 100);
+        
+        const tpOrderResponse = await exchange.createLimitOrder(
+          symbol,
+          oppositeAction,
+          amount,
+          limitPrice
+        );
+        takeProfitOrder = normalizeOrder(tpOrderResponse);
+      }
+    }
+    
+    return {
+      order: mainOrder,
+      stopLossOrder,
+      takeProfitOrder
+    };
   } catch (error) {
-    console.error(`Failed to initialize exchange: ${error}`);
-    log(`Failed to initialize exchange: ${error}`, 'exchange');
+    console.error(`Error executing trade signal for ${symbol}:`, error);
+    throw error;
   }
 };
+
+// Helper to format pair symbols
+export const formatPair = (pair: string): string => {
+  return pair.replace('/', '')
+}
+
+// Helper to normalize order response to SimplifiedOrder
+const normalizeOrder = (order: any): SimplifiedOrder => {
+  // Handle null or undefined order object
+  if (!order) {
+    return {
+      id: '',
+      status: 'undefined',
+      symbol: '',
+      type: '',
+      side: '',
+      price: 0,
+      amount: 0,
+      cost: 0,
+      filled: 0,
+      remaining: 0,
+      timestamp: Date.now(),
+      datetime: new Date().toISOString(),
+    };
+  }
+
+  return {
+    id: order.id || '',
+    status: order.status || 'undefined',
+    symbol: order.symbol || '',
+    type: order.type || '',
+    side: order.side || '',
+    price: typeof order.price === 'number' ? order.price : 0,
+    amount: typeof order.amount === 'number' ? order.amount : 0,
+    cost: typeof order.cost === 'number' ? order.cost : 0,
+    filled: typeof order.filled === 'number' ? order.filled : 0,
+    remaining: typeof order.remaining === 'number' ? order.remaining : 0,
+    timestamp: typeof order.timestamp === 'number' ? order.timestamp : Date.now(),
+    datetime: order.datetime || new Date().toISOString(),
+    ...order
+  };
+}

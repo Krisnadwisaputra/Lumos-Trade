@@ -2,6 +2,6 @@ name = "Start application"
 onBoot = true
 
 [tasks.start]
-command = "bun server.js"
+command = "PYTHONPATH=.pythonlibs python app.py"
 runAtStart = true
 persistent = true
