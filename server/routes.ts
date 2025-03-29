@@ -21,6 +21,14 @@ import {
 
 export async function registerRoutes(app: Express, httpServer: Server): Promise<Server> {
   // WebSocket is initialized in server/index.ts, we don't need to initialize it here
+  // Health check endpoint
+  app.get("/api/health", (req: Request, res: Response) => {
+    res.json({
+      status: "simulation", // We're always in simulation mode in Replit due to Binance restrictions
+      timestamp: new Date().toISOString()
+    });
+  });
+  
   // Error handler middleware
   app.use((err: any, req: Request, res: Response, next: Function) => {
     console.error(err);
